@@ -1,0 +1,622 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="noindex">
+<title>Scatter Pad</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23F3ECB0'/%3E%3Cpath d='M7 12h18M7 20h12' stroke='%231B2440' stroke-width='3' stroke-linecap='round'/%3E%3Cpath d='M4.5 20.6c5-1.6 11 1 16.5-.4' stroke='%23C4352B' stroke-width='2' stroke-linecap='round' fill='none'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Shantell+Sans:wght@400;600&family=Vazirmatn:wght@400;500&display=swap">
+<style>
+/* Layout: one legal-pad sheet that fills the window and never scrolls. A thin line of
+   chrome top and bottom; everything between is a free field where short tasks sit
+   wherever they were dropped, shrinking a little as the page fills up. */
+:root{
+  --paper:#F3ECB0;
+  --dot:#B4BC9C;
+  --ink:#1B2440;
+  --ink-soft:#565C76;
+  --ink-done:#868774;
+  --strike:#C4352B;
+  --chip:#FBF6CF;
+  --line:#CDC585;
+  --ok:#2F7D4F;
+  --focus:#2B56C9;
+  --hand:"Shantell Sans","Comic Sans MS","Segoe Print","Bradley Hand",cursive;
+  --fa:"Vazirmatn","Segoe UI",Tahoma,sans-serif;
+  --ui:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --paper:#141927; --dot:#2C3651; --ink:#EFE8A8; --ink-soft:#959CB8; --ink-done:#74755F;
+    --strike:#FF6F61; --chip:#1E2538; --line:#353F5C; --ok:#6FCF97; --focus:#8FB0FF;
+  }
+}
+
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+html{padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+body{
+  margin:0; overflow:hidden; padding-inline:16px;
+  display:grid; grid-template-rows:auto minmax(0,1fr) auto;
+  background-color:var(--paper);
+  background-image:radial-gradient(circle,var(--dot) 1.1px,transparent 1.7px);
+  background-size:26px 26px;
+  color:var(--ink); font:400 12px/1.4 var(--ui);
+  -webkit-user-select:none; user-select:none;
+}
+p,h1{margin:0}
+
+/* chrome */
+.bar{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:6px 16px; padding-block:12px 6px}
+.foot{padding-block:6px 12px}
+.date{font:600 22px/1.1 var(--hand); color:var(--ink)}
+.meta{display:flex; align-items:center; gap:14px; color:var(--ink-soft); font-variant-numeric:tabular-nums}
+.status{display:inline-flex; align-items:center; gap:6px}
+.status i{width:7px; height:7px; border-radius:50%; background:var(--ink-soft)}
+.status[data-s="ok"] i{background:var(--ok)}
+.status[data-s="err"] i{background:var(--strike)}
+.hint{color:var(--ink-soft)}
+.hint b{font-weight:400; opacity:.5; padding-inline:.35em}
+.acts{display:flex; gap:8px; margin-left:auto}
+.btn{
+  font:500 12px/1 var(--ui); color:var(--ink); background:var(--chip);
+  border:1px solid var(--line); border-radius:6px; padding:7px 10px; cursor:pointer;
+}
+.btn:hover:not(:disabled){border-color:var(--ink-soft)}
+.btn:disabled{opacity:.45; cursor:default}
+.btn:focus-visible,.txt:focus-visible,.tools button:focus-visible{outline:2px solid var(--focus); outline-offset:2px}
+
+/* the field */
+#field{position:relative; min-height:0; cursor:text; --fs:28px; --maxw:100%}
+.empty{position:absolute; inset:0; display:grid; place-content:center; justify-items:center; gap:8px; text-align:center; pointer-events:none}
+.empty strong{font:600 30px/1.1 var(--hand); color:var(--ink)}
+.empty span{color:var(--ink-soft)}
+
+.task{
+  position:absolute; left:50%; top:50%; z-index:1;
+  width:max-content; max-width:min(24ch,var(--maxw));
+  transform:translate(-50%,-50%) rotate(var(--tilt,0deg));
+  font:400 var(--fs)/1.25 var(--hand);
+}
+.task.fa{font-family:var(--fa); font-size:calc(var(--fs)*.95); line-height:1.6}
+.task:hover,.task:focus-within{z-index:5}
+.task.drag{z-index:9}
+.txt{
+  all:unset; display:block; padding:.1em .3em; border-radius:.2em;
+  text-align:center; overflow-wrap:anywhere; color:var(--ink);
+  cursor:pointer; touch-action:none; transition:color .2s;
+}
+.task.drag .txt{cursor:grabbing}
+.task.done .txt{color:var(--ink-done)}
+.strike{position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none}
+.strike path{
+  fill:none; stroke:var(--strike); stroke-width:.08em; stroke-linecap:round;
+  stroke-dasharray:1; stroke-dashoffset:1; opacity:0;
+  transition:stroke-dashoffset .28s cubic-bezier(.3,.7,.3,1), opacity 0s .28s;
+}
+.task.done .strike path{stroke-dashoffset:0; opacity:1; transition:stroke-dashoffset .28s cubic-bezier(.3,.7,.3,1), opacity 0s}
+
+.tools{
+  position:absolute; left:100%; top:50%; transform:translateY(-50%);
+  display:flex; gap:3px; padding-left:6px; opacity:0; pointer-events:none; transition:opacity .12s;
+}
+.task.flip .tools{left:auto; right:100%; padding-left:0; padding-right:6px}
+.task:hover .tools,.task:focus-within .tools{opacity:1; pointer-events:auto}
+.task.drag .tools,.task.editing .tools,.task.editing .txt,.task.editing .strike{display:none}
+.tools button{
+  all:unset; box-sizing:border-box; width:26px; height:26px; display:grid; place-items:center;
+  border-radius:6px; background:var(--chip); border:1px solid var(--line); color:var(--ink-soft); cursor:pointer;
+}
+.tools button:hover{color:var(--ink); border-color:var(--ink-soft)}
+.tools svg{width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round}
+
+/* writing */
+.edit{
+  display:block; min-width:5ch; padding:.1em .3em; text-align:center;
+  white-space:pre-wrap; overflow-wrap:anywhere; outline:none; cursor:text;
+  border-bottom:2px solid var(--focus); color:var(--ink);
+  -webkit-user-select:text; user-select:text;
+}
+.edit:empty::before{content:attr(data-ph); color:var(--ink-done)}
+.wc{
+  position:absolute; top:100%; left:50%; transform:translateX(-50%); margin-top:7px;
+  font:400 11px/1 var(--ui); white-space:nowrap; color:var(--ink-soft);
+}
+.wc.over{color:var(--strike)}
+
+.toast{
+  position:fixed; left:50%; bottom:calc(58px + env(safe-area-inset-bottom,0px)); transform:translateX(-50%);
+  display:flex; align-items:center; gap:12px; max-width:calc(100% - 32px);
+  padding:6px 6px 6px 12px; border-radius:8px; z-index:20;
+  background:var(--chip); border:1px solid var(--line); color:var(--ink);
+}
+
+@media (max-width:720px){ .hint{display:none} .date{font-size:19px} }
+@media (prefers-reduced-motion: reduce){
+  .strike path,.task.done .strike path,.txt,.tools{transition:none}
+}
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <h1 class="date" id="date">Today</h1>
+  <p class="meta">
+    <span id="count">Nothing written</span>
+    <span class="status" id="status" data-s="wait"><i></i><span id="statusText">Opening</span></span>
+    <button class="btn" id="signin" type="button" hidden>Sign in</button>
+  </p>
+</header>
+
+<main id="field" aria-label="Tasks">
+  <div class="empty" id="empty">
+    <strong id="emptyTitle">Opening your pad</strong>
+    <span>Click anywhere to write, or just start typing.</span>
+  </div>
+</main>
+
+<footer class="bar foot">
+  <p class="hint">Click anywhere to write<b>·</b>click a task to cross it off<b>·</b>drag to move<b>·</b>or just start typing</p>
+  <div class="acts">
+    <button class="btn" id="tidy" type="button" disabled>Tidy up</button>
+    <button class="btn" id="sweep" type="button" disabled>Sweep crossed off</button>
+  </div>
+</footer>
+
+<div class="toast" id="toast" role="status" hidden>
+  <span id="toastMsg"></span>
+  <button class="btn" id="undo" type="button">Undo</button>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const field = $('field');
+  const KEY = 'scatterpad.v2';
+  const NS = 'http://www.w3.org/2000/svg';
+  const FA = /[؀-ۿݐ-ݿﭐ-﷿ﹰ-﻿]/;   // Arabic-script text gets Vazirmatn
+  const ICON_EDIT = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 13l.6-3L11 2.6l2.4 2.4L6 12.4z"/><path d="M9.6 4l2.4 2.4"/></svg>';
+  const ICON_X = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
+
+  const tasks = new Map();   // id -> {id,text,x,y,tilt,done,created_at,done_at}; x,y are the task's centre, 0..1 of the field
+  const tomb = new Map();    // tasks taken off the page, kept until the server has flagged them
+  const dirty = new Set();   // ids with changes the server has not confirmed yet
+  const inflight = new Set();
+  const els = new Map();     // id -> element
+  let loaded = false, mode = 'opening';   // opening | synced | error | signin | setup
+  let flushing = false, pulling = false, rev = 0, retryMs = 0, retryTimer = 0, held = null;
+  let draft = null, undoFn = null, toastTimer = 0, dragEndAt = 0, FS = 28;
+
+  // ---------- data ----------
+  const num = (v, lo, hi, d) => (typeof v === 'number' && isFinite(v)) ? Math.min(hi, Math.max(lo, v)) : d;
+  function clean(id, d) {
+    return {
+      id, text: String(d.text ?? '').slice(0, 80),
+      x: num(d.x, 0, 1, .5), y: num(d.y, 0, 1, .5), tilt: num(d.tilt, -4, 4, 0),
+      done: d.done === true, created_at: num(d.created_at, 0, 9e15, 0), done_at: num(d.done_at, 0, 9e15, null),
+    };
+  }
+  const newId = () => 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+  function saveCache() {
+    try { localStorage.setItem(KEY, JSON.stringify({ tasks: [...tasks.values()], tomb: [...tomb.values()], dirty: [...dirty] })); } catch {}
+  }
+  function loadCache() {
+    try {
+      const c = JSON.parse(localStorage.getItem(KEY) || 'null');
+      if (!c) return;
+      for (const d of c.tasks || []) if (d && typeof d.id === 'string') tasks.set(d.id, clean(d.id, d));
+      for (const d of c.tomb || []) if (d && typeof d.id === 'string' && !tasks.has(d.id)) tomb.set(d.id, clean(d.id, d));
+      for (const id of c.dirty || []) if (tasks.has(id) || tomb.has(id)) dirty.add(id);
+    } catch {}
+  }
+
+  const isBusy = id => dirty.has(id) || inflight.has(id) || held === id || (draft && draft.id === id);
+
+  async function api(method, body) {
+    const res = await fetch('/api/tasks', {
+      method, redirect: 'manual', credentials: 'same-origin', cache: 'no-store',
+      headers: body ? { 'content-type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    // An expired Cloudflare Access session answers with a redirect to its login page.
+    if (res.type === 'opaqueredirect' || res.status === 401 || res.status === 403) throw Object.assign(new Error('signin'), { kind: 'signin' });
+    if (res.status === 503) throw Object.assign(new Error('setup'), { kind: 'setup' });
+    if (!res.ok) throw new Error('http ' + res.status);
+    return res.json();
+  }
+
+  function ok() { mode = 'synced'; retryMs = 0; clearTimeout(retryTimer); }
+  function fail(e) {
+    mode = e && e.kind ? e.kind : 'error';
+    loaded = true;
+    clearTimeout(retryTimer);
+    if (mode !== 'signin') {
+      retryMs = Math.min(60000, retryMs ? retryMs * 2 : 4000);
+      retryTimer = setTimeout(pull, retryMs);
+    }
+    chrome();
+  }
+
+  // Fetch the page as the server has it. Anything changed here in the meantime wins until it is sent.
+  async function pull() {
+    if (pulling) return;
+    pulling = true;
+    const at = rev;
+    try {
+      const data = await api('GET');
+      if (at !== rev) { pulling = false; return void setTimeout(pull, 300); }
+      const seen = new Set();
+      for (const r of data.tasks || []) {
+        if (!r || typeof r.id !== 'string') continue;
+        seen.add(r.id);
+        if (!isBusy(r.id)) tasks.set(r.id, clean(r.id, r));
+      }
+      for (const id of [...tasks.keys()]) if (!seen.has(id) && !isBusy(id)) tasks.delete(id);
+      loaded = true; ok(); saveCache(); render(); flush();
+    } catch (e) { fail(e); render(); }
+    pulling = false;
+  }
+
+  async function flush() {
+    if (flushing || !dirty.size) return;
+    flushing = true; chrome();
+    const ids = [...dirty].slice(0, 100), payload = [];
+    for (const id of ids) {
+      const t = tasks.get(id), g = tomb.get(id);
+      if (t) payload.push({ ...t, archived: false });
+      else if (g) payload.push({ ...g, archived: true });
+      dirty.delete(id); inflight.add(id);
+    }
+    try {
+      if (payload.length) await api('PUT', { tasks: payload });
+      for (const p of payload) if (p.archived && !dirty.has(p.id) && !tasks.has(p.id)) tomb.delete(p.id);
+      inflight.clear(); ok();
+    } catch (e) {
+      ids.forEach(id => dirty.add(id));
+      inflight.clear(); fail(e);
+    }
+    flushing = false; saveCache(); chrome();
+    if (dirty.size && mode === 'synced') flush();
+  }
+
+  function commit(ids) {
+    rev++;
+    ids.forEach(id => dirty.add(id));
+    saveCache(); render(); flush();
+  }
+
+  // ---------- geometry ----------
+  const clampC = (c, size, max) => size >= max ? max / 2 : Math.min(max - size / 2 - 2, Math.max(size / 2 + 2, c));
+  function rng(str) {
+    let h = 2166136261;
+    for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return () => { h |= 0; h = h + 0x6D2B79F5 | 0; let t = Math.imul(h ^ h >>> 15, 1 | h); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  }
+  function gap(a, b) {
+    const dx = Math.abs(a.x - b.x) - (a.w + b.w) / 2, dy = Math.abs(a.y - b.y) - (a.h + b.h) / 2;
+    if (dx < 0 && dy < 0) return Math.max(dx, dy);
+    return Math.hypot(Math.max(dx, 0), Math.max(dy, 0));
+  }
+  function rects() {
+    const out = [];
+    for (const el of els.values()) out.push({ x: parseFloat(el.style.left) || 0, y: parseFloat(el.style.top) || 0, w: el.offsetWidth, h: el.offsetHeight });
+    return out;
+  }
+  // The emptiest place for a w×h block: best of many random tries, with the edges as mild obstacles.
+  function freeSpot(w, h, placed, tries = 180) {
+    const W = field.clientWidth, H = field.clientHeight;
+    if (!placed.length) return { x: W / 2, y: H * .45, w, h };
+    let best = null, bs = -Infinity;
+    for (let i = 0; i < tries; i++) {
+      const c = { x: w / 2 + 4 + Math.random() * Math.max(1, W - w - 8), y: h / 2 + 4 + Math.random() * Math.max(1, H - h - 8), w, h };
+      const edge = Math.min(c.x - w / 2, W - c.x - w / 2, c.y - h / 2, H - c.y - h / 2);
+      let s = edge * 2 + 12;
+      for (const p of placed) { s = Math.min(s, gap(c, p)); if (s < bs) break; }
+      if (s > bs) { bs = s; best = c; }
+    }
+    return best;
+  }
+
+  // ---------- drawing ----------
+  function build(t) {
+    const el = document.createElement('div');
+    el.className = 'task'; el.dataset.id = t.id;
+    el.innerHTML = '<button type="button" class="txt" dir="auto"></button><svg class="strike" aria-hidden="true"></svg>' +
+      '<span class="tools"><button type="button" data-act="edit" aria-label="Edit task" title="Edit">' + ICON_EDIT +
+      '</button><button type="button" data-act="remove" aria-label="Remove task" title="Remove">' + ICON_X + '</button></span>';
+    return el;
+  }
+
+  function strike(el, t, w, h) {
+    const fa = el.classList.contains('fa'), key = w + 'x' + h + (fa ? 'f' : '');
+    if (el.dataset.sk === key) return;
+    el.dataset.sk = key;
+    const svg = el.querySelector('.strike');
+    svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+    svg.replaceChildren();
+    const fs = fa ? FS * .95 : FS, lh = fs * (fa ? 1.6 : 1.25), pad = fs * .1;
+    const lines = Math.max(1, Math.round((h - 2 * pad) / lh)), r = rng(t.id);
+    const j = () => ((r() - .5) * fs * .22);
+    for (let i = 0; i < lines; i++) {
+      const y = pad + lh * (i + .56), p = document.createElementNS(NS, 'path');
+      p.setAttribute('d', `M ${(-fs * .1).toFixed(1)} ${(y + j()).toFixed(1)} C ${(w * .3).toFixed(1)} ${(y + j()).toFixed(1)}, ${(w * .65).toFixed(1)} ${(y + j()).toFixed(1)}, ${(w + fs * .1).toFixed(1)} ${(y + j()).toFixed(1)}`);
+      p.setAttribute('pathLength', '1');
+      if (i) p.style.transitionDelay = (i * .12) + 's';
+      svg.appendChild(p);
+    }
+  }
+
+  function layout() {
+    const W = field.clientWidth, H = field.clientHeight;
+    if (!W || !H) return;
+    const n = Math.max(tasks.size + (draft && !draft.id ? 1 : 0), 10);
+    FS = Math.max(15, Math.min(32, Math.sqrt(W * H / (89 * n))));
+    field.style.setProperty('--fs', FS.toFixed(1) + 'px');
+    field.style.setProperty('--maxw', (W - 8) + 'px');
+    const items = [];
+    for (const [id, el] of els) { const t = tasks.get(id); if (t) items.push([t, el, el.offsetWidth, el.offsetHeight]); }
+    const dw = draft && !draft.id ? [draft.el.offsetWidth, draft.el.offsetHeight] : null;
+    for (const [t, el, w, h] of items) {
+      const cx = clampC(t.x * W, w, W), cy = clampC(t.y * H, h, H);
+      el.style.left = cx.toFixed(1) + 'px'; el.style.top = cy.toFixed(1) + 'px';
+      el.classList.toggle('flip', cx + w / 2 + 70 > W);
+      strike(el, t, w, h);
+    }
+    if (dw) {
+      const cx = clampC(draft.x * W, dw[0], W), cy = clampC(draft.y * H, dw[1], H - 18);
+      draft.el.style.left = cx.toFixed(1) + 'px'; draft.el.style.top = cy.toFixed(1) + 'px';
+      draft.x = cx / W; draft.y = cy / H;
+    }
+  }
+
+  function chrome() {
+    let open = 0, done = 0;
+    for (const t of tasks.values()) t.done ? done++ : open++;
+    $('count').textContent = !open && !done ? 'Nothing written' : !open ? `All ${done} crossed off`
+      : done ? `${open} to do · ${done} crossed off` : `${open} to do`;
+    $('sweep').disabled = !done;
+    $('sweep').textContent = done ? `Sweep ${done} crossed off` : 'Sweep crossed off';
+    $('tidy').disabled = tasks.size < 2;
+    const s = mode === 'opening' ? ['wait', 'Opening']
+      : mode === 'signin' ? ['err', 'Signed out. Kept on this device']
+      : mode === 'setup' ? ['err', 'Locked until Cloudflare Access is on']
+      : mode === 'error' ? ['err', 'Offline. Kept on this device']
+      : flushing || dirty.size ? ['wait', 'Saving'] : ['ok', 'Saved'];
+    $('status').dataset.s = s[0]; $('statusText').textContent = s[1];
+    $('signin').hidden = mode !== 'signin';
+    $('empty').hidden = tasks.size > 0 || !!draft;
+    $('emptyTitle').textContent = loaded ? 'A clear page.' : 'Opening your pad';
+  }
+
+  function render() {
+    for (const [id, el] of els) if (!tasks.has(id)) { el.remove(); els.delete(id); }
+    for (const t of tasks.values()) {
+      let el = els.get(t.id);
+      if (!el) { el = build(t); els.set(t.id, el); field.appendChild(el); }
+      const txt = el.querySelector('.txt');
+      if (txt.textContent !== t.text) txt.textContent = t.text;
+      txt.setAttribute('aria-pressed', String(t.done));
+      txt.title = t.done ? 'Click to un-cross' : 'Click to cross off';
+      const fa = FA.test(t.text);
+      el.classList.toggle('fa', fa);
+      if (fa) txt.lang = 'fa'; else txt.removeAttribute('lang');
+      el.classList.toggle('done', t.done);
+      el.style.setProperty('--tilt', t.tilt + 'deg');
+    }
+    chrome(); layout();
+  }
+
+  // ---------- actions ----------
+  function offerUndo(msg, fn) {
+    undoFn = fn; $('toastMsg').textContent = msg; $('toast').hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(hideToast, 7000);
+  }
+  function hideToast() { $('toast').hidden = true; undoFn = null; }
+  function doUndo() { const fn = undoFn; hideToast(); if (fn) fn(); }
+
+  function toggle(id) {
+    const t = tasks.get(id); if (!t) return;
+    t.done = !t.done; t.done_at = t.done ? Date.now() : null;
+    commit([id]);
+  }
+  // Takes tasks off the page. The server keeps the rows and only flags them as archived.
+  function removeTasks(ids, msg) {
+    const gone = ids.map(id => tasks.get(id)).filter(Boolean).map(t => ({ ...t }));
+    if (!gone.length) return;
+    gone.forEach(t => { tasks.delete(t.id); tomb.set(t.id, t); });
+    commit(gone.map(t => t.id));
+    offerUndo(msg || `Removed “${gone[0].text}”`, () => {
+      gone.forEach(t => { tomb.delete(t.id); tasks.set(t.id, t); });
+      commit(gone.map(t => t.id));
+    });
+  }
+  function tidy() {
+    const W = field.clientWidth, H = field.clientHeight, before = [], placed = [];
+    const order = [...els].map(([id, el]) => ({ id, w: el.offsetWidth, h: el.offsetHeight })).sort((a, b) => b.w - a.w);
+    for (const o of order) {
+      const t = tasks.get(o.id); if (!t) continue;
+      before.push({ id: t.id, x: t.x, y: t.y });
+      const c = freeSpot(o.w, o.h, placed, 240);
+      placed.push(c); t.x = c.x / W; t.y = c.y / H;
+    }
+    commit(before.map(b => b.id));
+    offerUndo('Tidied up', () => {
+      before.forEach(b => { const t = tasks.get(b.id); if (t) { t.x = b.x; t.y = b.y; } });
+      commit(before.map(b => b.id));
+    });
+  }
+
+  // ---------- writing ----------
+  function openEditor({ id = null, x = .5, y = .5, seed = '' }) {
+    closeEditor(true);
+    const t = id ? tasks.get(id) : null;
+    if (id && !t) return;
+    let host;
+    if (id) { host = els.get(id); host.classList.add('editing'); }
+    else { host = document.createElement('div'); host.className = 'task editing'; field.appendChild(host); }
+    const ed = document.createElement('span');
+    ed.className = 'edit'; ed.setAttribute('role', 'textbox'); ed.dir = 'auto';
+    ed.setAttribute('aria-label', id ? 'Edit task' : 'New task');
+    ed.dataset.ph = 'two to five words'; ed.spellcheck = false;
+    try { ed.contentEditable = 'plaintext-only'; } catch { ed.contentEditable = 'true'; }
+    if (ed.contentEditable !== 'plaintext-only') ed.contentEditable = 'true';
+    ed.textContent = id ? t.text : seed;
+    const wc = document.createElement('span'); wc.className = 'wc';
+    host.append(ed, wc);
+    draft = { id, el: host, ed, wc, x, y };
+
+    const onInput = () => {
+      if (!ed.textContent) ed.replaceChildren();
+      host.classList.toggle('fa', FA.test(ed.textContent));
+      const words = ed.textContent.trim().split(/\s+/).filter(Boolean).length;
+      wc.classList.toggle('over', words > 5);
+      wc.textContent = words > 5 ? `${words} words. Trim to five?` : 'Enter to keep · Esc to drop';
+      layout();
+    };
+    ed.addEventListener('input', onInput);
+    ed.addEventListener('keydown', e => {
+      if (e.isComposing) return;
+      if (e.key === 'Enter') { e.preventDefault(); closeEditor(true); }
+      else if (e.key === 'Escape') { e.preventDefault(); closeEditor(false); }
+      e.stopPropagation();
+    });
+    ed.addEventListener('paste', e => {
+      e.preventDefault();
+      const s = (e.clipboardData?.getData('text/plain') || '').replace(/\s+/g, ' ');
+      const sel = getSelection();
+      if (!sel.rangeCount) return;
+      const r = sel.getRangeAt(0); r.deleteContents(); r.insertNode(document.createTextNode(s)); r.collapse(false);
+      ed.normalize(); onInput();
+    });
+    ed.addEventListener('blur', () => closeEditor(true));
+
+    chrome(); onInput(); ed.focus();
+    const r = document.createRange(); r.selectNodeContents(ed); r.collapse(false);
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+  }
+
+  function closeEditor(keep) {
+    if (!draft) return;
+    const d = draft; draft = null;
+    const text = d.ed.textContent.replace(/\s+/g, ' ').trim().slice(0, 80);
+    d.ed.remove(); d.wc.remove();
+    if (d.id) {
+      d.el.classList.remove('editing');
+      const t = tasks.get(d.id);
+      if (t && keep && !text) return removeTasks([d.id]);
+      if (t && keep && text !== t.text) { t.text = text; return commit([d.id]); }
+      return render();
+    }
+    d.el.remove();
+    if (keep && text) {
+      const id = newId();
+      tasks.set(id, { id, text, x: d.x, y: d.y, tilt: +(Math.random() * 5 - 2.5).toFixed(1), done: false, created_at: Date.now(), done_at: null });
+      return commit([id]);
+    }
+    render();
+  }
+
+  // ---------- input ----------
+  field.addEventListener('pointerdown', e => {
+    const txt = e.target.closest('.txt');
+    if (!txt || e.button !== 0) return;
+    const el = txt.parentElement, id = el.dataset.id;
+    const W = field.clientWidth, H = field.clientHeight;
+    const s = { px: e.clientX, py: e.clientY, x: parseFloat(el.style.left) || 0, y: parseFloat(el.style.top) || 0 };
+    let moved = false;
+    try { txt.setPointerCapture(e.pointerId); } catch {}
+    const move = ev => {
+      const dx = ev.clientX - s.px, dy = ev.clientY - s.py;
+      if (!moved) { if (Math.hypot(dx, dy) < 5) return; moved = true; held = id; el.classList.add('drag'); }
+      const t = tasks.get(id); if (!t) return;
+      const cx = clampC(s.x + dx, el.offsetWidth, W), cy = clampC(s.y + dy, el.offsetHeight, H);
+      el.style.left = cx + 'px'; el.style.top = cy + 'px';
+      t.x = cx / W; t.y = cy / H;
+    };
+    const up = () => {
+      txt.removeEventListener('pointermove', move);
+      txt.removeEventListener('pointerup', up);
+      txt.removeEventListener('pointercancel', up);
+      if (!moved) return;
+      el.classList.remove('drag'); held = null; dragEndAt = performance.now();
+      field.appendChild(el);
+      if (tasks.has(id)) commit([id]);
+    };
+    txt.addEventListener('pointermove', move);
+    txt.addEventListener('pointerup', up);
+    txt.addEventListener('pointercancel', up);
+  });
+
+  field.addEventListener('click', e => {
+    const act = e.target.closest('[data-act]');
+    if (act) {
+      const id = act.closest('.task').dataset.id;
+      return act.dataset.act === 'edit' ? openEditor({ id }) : removeTasks([id]);
+    }
+    const txt = e.target.closest('.txt');
+    if (txt) {
+      if (performance.now() - dragEndAt < 300) return;
+      return toggle(txt.parentElement.dataset.id);
+    }
+    if (e.target === field) {
+      const r = field.getBoundingClientRect();
+      openEditor({ x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height });
+    }
+  });
+
+  // A double click toggles twice (back to where it was), then opens the task for editing.
+  field.addEventListener('dblclick', e => {
+    const txt = e.target.closest('.txt');
+    if (txt) openEditor({ id: txt.parentElement.dataset.id });
+  });
+
+  document.addEventListener('keydown', e => {
+    if (draft) return;
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && undoFn) { e.preventDefault(); return doUndo(); }
+    if (e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
+    const onTask = e.target.closest ? e.target.closest('.task') : null;
+    if (onTask && (e.key === 'Delete' || e.key === 'Backspace')) { e.preventDefault(); return removeTasks([onTask.dataset.id]); }
+    if (onTask && e.key === 'F2') { e.preventDefault(); return openEditor({ id: onTask.dataset.id }); }
+    if (e.key.length === 1 && e.key !== ' ') {
+      e.preventDefault();
+      const W = field.clientWidth, H = field.clientHeight;
+      const c = freeSpot(FS * 9, FS * 1.7, rects());
+      openEditor({ x: c.x / W, y: c.y / H, seed: e.key });
+    }
+  });
+
+  $('tidy').addEventListener('click', tidy);
+  $('sweep').addEventListener('click', () => {
+    const ids = [...tasks.values()].filter(t => t.done).map(t => t.id);
+    removeTasks(ids, `Swept ${ids.length} crossed-off ${ids.length === 1 ? 'task' : 'tasks'}`);
+  });
+  $('undo').addEventListener('click', doUndo);
+  $('signin').addEventListener('click', () => location.reload());
+
+  // ---------- start ----------
+  $('date').textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
+  loadCache();
+  render();
+  new ResizeObserver(layout).observe(field);
+  if (document.fonts) {
+    const refit = () => { for (const el of els.values()) delete el.dataset.sk; layout(); };
+    document.fonts.ready.then(refit);
+    document.fonts.addEventListener('loadingdone', refit);
+  }
+  pull();
+
+  // Pick up changes made on another device.
+  const quiet = () => document.visibilityState === 'visible' && !draft && !held && mode !== 'signin';
+  setInterval(() => { if (quiet()) pull(); }, 30000);
+  document.addEventListener('visibilitychange', () => { if (quiet()) pull(); });
+  addEventListener('online', () => { if (quiet()) pull(); });
+})();
+</script>
+</body>
+</html>

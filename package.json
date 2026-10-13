@@ -1,0 +1,19 @@
+{
+  "name": "scatter-pad",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A one-screen to-do pad: write short tasks anywhere on the page and cross them off.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:local": "wrangler d1 migrations apply scatter-pad --local",
+    "db:remote": "wrangler d1 migrations apply scatter-pad --remote"
+  },
+  "dependencies": {
+    "jose": "^6.2.12"
+  },
+  "devDependencies": {
+    "wrangler": "^4.150.0"
+  }
+}

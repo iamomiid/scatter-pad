@@ -1,0 +1,8 @@
+node_modules/
+.wrangler/
+.dev.vars
+.claude/
+.DS_Store
+
+# Your own deployment config (domain, database id). Start from wrangler.example.jsonc.
+wrangler.jsonc
