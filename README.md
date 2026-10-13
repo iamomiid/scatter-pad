@@ -20,7 +20,8 @@ Persian tasks are set in Vazirmatn and run right to left. Latin tasks use a hand
 ## Stack
 
 - `public/index.html`: the whole front end, one file, no build step.
-- `src/index.js`: a Cloudflare Worker with one endpoint, `/api/tasks` (`GET` lists the page, `PUT` saves a batch of tasks).
+- `src/index.js`: a Cloudflare Worker. `/api/tasks` serves the page (`GET` lists it, `PUT` saves a batch of tasks).
+- `src/mcp.js`: `/mcp`, the same list as tools for an AI assistant.
 - `migrations/`: the D1 schema, one `tasks` table.
 - Cloudflare Access in front of everything for sign-in.
 
@@ -53,6 +54,30 @@ npx wrangler secret put ACCESS_TEAM_DOMAIN
 ```
 
 `ACCESS_TEAM_DOMAIN` is the bare host name, without `https://`.
+
+## MCP
+
+`/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server over Streamable HTTP, so an assistant can read and change the pad. The page picks the changes up within 30 seconds, or as soon as its tab is focused.
+
+| Tool | What it does |
+|---|---|
+| `list_tasks` | Everything on the page, with ids. |
+| `add_tasks` | Writes up to 20 new tasks; the Worker picks a free spot for each. |
+| `set_done` | Crosses a task off, or un-crosses it. |
+| `edit_task` | Replaces a task's text. |
+| `remove_task` | Takes a task off the page (archived, like everything else). |
+
+**This endpoint has no sign-in.** Anyone who knows the URL can read and rewrite the list. The Access check in the Worker does not apply to it.
+
+Access still stands in front of the whole domain, so `/mcp` has to be let through: add a second self-hosted Access application for `<your-domain>/mcp` with a single policy, action **Bypass**, include **Everyone**. The more specific path wins over the application that covers the domain.
+
+Then point a client at it:
+
+```bash
+claude mcp add --transport http scatter-pad https://<your-domain>/mcp
+```
+
+In claude.ai, add it as a custom connector with the same URL.
 
 ## Configuration
 

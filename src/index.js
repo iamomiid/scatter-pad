@@ -1,4 +1,6 @@
 import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { mcp } from './mcp.js';
+import { cleanText } from './text.js';
 
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), {
@@ -40,7 +42,7 @@ const num = (v, lo, hi) => (typeof v === 'number' && Number.isFinite(v) ? Math.m
 // Turns one task from the request into the bound values for UPSERT, or null if it is unusable.
 function toRow(t, now) {
   if (!t || typeof t !== 'object' || typeof t.id !== 'string' || !ID.test(t.id)) return null;
-  const text = typeof t.text === 'string' ? t.text.replace(/\s+/g, ' ').trim().slice(0, 80) : '';
+  const text = cleanText(t.text);
   const x = num(t.x, 0, 1), y = num(t.y, 0, 1);
   if (!text || x === null || y === null) return null;
   const done = t.done === true;
@@ -68,6 +70,8 @@ const UPSERT = `
 export default {
   async fetch(request, env) {
     const { pathname } = new URL(request.url);
+    // The MCP endpoint is open on purpose: it is for assistants, which cannot sign in through Access.
+    if (pathname === '/mcp') return mcp(request, env);
     if (pathname !== '/api/tasks') return json({ error: 'not_found' }, 404);
 
     const refusal = await denied(request, env);
