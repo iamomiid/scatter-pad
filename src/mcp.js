@@ -1,7 +1,9 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { z } from 'zod';
-import { cleanText } from './text.js';
+import { readSettings } from './settings.js';
+import { autoTag, ensureTags } from './tags.js';
+import { cleanTags, cleanText, parseTags, splitTags } from './text.js';
 
 const MAX_ON_PAGE = 200;
 
@@ -12,23 +14,9 @@ const missing = id => oops(`No task with id "${id}" is on the page. Call list_ta
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,40}$/).describe('Task id, as returned by list_tasks.');
 const newId = () => 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
-// The Worker cannot know how large a task is drawn, so it only keeps centres apart: of a handful of random
-// spots, take the one farthest from every task already there. A task is much wider than it is tall, so
-// vertical distance counts for more. "Tidy up" on the page settles whatever still overlaps.
-function freeSpot(taken) {
-  let best, bestGap = -1;
-  for (let i = 0; i < 40; i++) {
-    const x = 0.14 + Math.random() * 0.72, y = 0.1 + Math.random() * 0.8;
-    let gap = Infinity;
-    for (const t of taken) gap = Math.min(gap, Math.hypot(x - t.x, (y - t.y) * 3));
-    if (gap > bestGap) { best = { x, y }; bestGap = gap; }
-  }
-  return best;
-}
-
 function build(env) {
   const server = new McpServer({ name: 'scatter-pad', version: '1.0.0' });
-  const onPage = () => env.DB.prepare('SELECT id, text, x, y, done FROM tasks WHERE archived_at IS NULL ORDER BY created_at').all();
+  const onPage = () => env.DB.prepare('SELECT id, text, done, tags, COALESCE(sort, created_at) AS sort FROM tasks WHERE archived_at IS NULL ORDER BY sort').all();
   // Changes one task that is still on the page. Returns false when there is no such task.
   const change = async (set, ...values) => {
     const { meta } = await env.DB.prepare(`UPDATE tasks SET ${set}, updated_at = ?1 WHERE id = ?2 AND archived_at IS NULL`)
@@ -38,36 +26,41 @@ function build(env) {
 
   server.registerTool('list_tasks', {
     title: 'List tasks',
-    description: 'Every task on the to-do pad, oldest first, including the ones already crossed off.',
+    description: 'Every task on the to-do pad, in the order it shows them, including the ones already crossed off.',
     annotations: { readOnlyHint: true },
   }, async () => {
     const { results } = await onPage();
-    return say({ tasks: results.map(r => ({ id: r.id, text: r.text, done: r.done === 1 })) });
+    return say({ tasks: results.map(r => ({ id: r.id, text: r.text, done: r.done === 1, tags: parseTags(r.tags) })) });
   });
 
   server.registerTool('add_tasks', {
     title: 'Add tasks',
-    description: 'Write new tasks on the pad. Each is a two-to-five-word summary, at most 80 characters; the pad picks where it goes.',
-    inputSchema: { texts: z.array(z.string()).min(1).max(20).describe('One short summary per task.') },
+    description: 'Write new tasks at the end of the pad. Each is a two-to-five-word summary, at most 80 characters. '
+      + 'Words starting with # become tags instead of text: "send invoice #work".',
+    inputSchema: { texts: z.array(z.string()).min(1).max(20).describe('One short summary per task, with any #tags.') },
     annotations: { destructiveHint: false },
   }, async ({ texts }) => {
-    const wanted = texts.map(cleanText).filter(Boolean);
+    const wanted = texts.map(splitTags).filter(w => w.text);
     if (!wanted.length) return oops('Every task was empty.');
     const { results } = await onPage();
     if (results.length + wanted.length > MAX_ON_PAGE) {
       return oops(`The pad holds ${MAX_ON_PAGE} tasks and has ${results.length}. Remove some first.`);
     }
-    const taken = results.map(r => ({ x: r.x, y: r.y })), now = Date.now();
-    const added = wanted.map((text, i) => {
-      const spot = freeSpot(taken);
-      taken.push(spot);
-      return { id: newId(), text, ...spot, tilt: +(Math.random() * 5 - 2.5).toFixed(1), created_at: now + i };
-    });
+    // The page lays tasks out in rows by sort; x and y are only where it last drew them.
+    if ((await readSettings(env)).auto_tag) {
+      const bare = wanted.filter(w => !w.tags.length), tags = await autoTag(env, bare.map(w => w.text));
+      bare.forEach((w, i) => { w.tags = tags[i]; });
+    }
+    await ensureTags(env, wanted.flatMap(w => w.tags));
+    const now = Date.now(), last = Math.max(now, ...results.map(r => r.sort + 1));
+    const added = wanted.map(({ text, tags }, i) => ({
+      id: newId(), text, tags, tilt: +(Math.random() * 5 - 2.5).toFixed(1), created_at: now + i, sort: last + i,
+    }));
     const insert = env.DB.prepare(
-      'INSERT INTO tasks (id, text, x, y, tilt, done, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6, ?7)',
+      'INSERT INTO tasks (id, text, x, y, tilt, done, created_at, updated_at, sort, tags) VALUES (?1, ?2, 0.5, 0.5, ?3, 0, ?4, ?5, ?6, ?7)',
     );
-    await env.DB.batch(added.map(t => insert.bind(t.id, t.text, t.x, t.y, t.tilt, t.created_at, now)));
-    return say({ added: added.map(t => ({ id: t.id, text: t.text, done: false })) });
+    await env.DB.batch(added.map(t => insert.bind(t.id, t.text, t.tilt, t.created_at, now, t.sort, JSON.stringify(t.tags))));
+    return say({ added: added.map(t => ({ id: t.id, text: t.text, done: false, tags: t.tags })) });
   });
 
   server.registerTool('set_done', {
@@ -84,13 +77,31 @@ function build(env) {
 
   server.registerTool('edit_task', {
     title: 'Edit a task',
-    description: 'Replace the text of a task. Keep it to a two-to-five-word summary, at most 80 characters.',
+    description: 'Replace the text of a task. Keep it to a two-to-five-word summary, at most 80 characters. '
+      + 'Any #tags in it are added to the task\'s tags; use set_tags to remove one.',
     inputSchema: { id, text: z.string().describe('The new summary.') },
     annotations: { destructiveHint: false, idempotentHint: true },
   }, async ({ id, text }) => {
-    const clean = cleanText(text);
+    const { text: clean, tags } = splitTags(text);
     if (!clean) return oops('The new text was empty. Use remove_task to take a task off the pad.');
-    return (await change('text = ?3', id, clean)) ? say({ id, text: clean }) : missing(id);
+    if (!tags.length) return (await change('text = ?3', id, clean)) ? say({ id, text: clean }) : missing(id);
+    const row = await env.DB.prepare('SELECT tags FROM tasks WHERE id = ?1 AND archived_at IS NULL').bind(id).first();
+    if (!row) return missing(id);
+    const all = cleanTags([...parseTags(row.tags), ...tags]);
+    await ensureTags(env, all);
+    return (await change('text = ?3, tags = ?4', id, clean, JSON.stringify(all))) ? say({ id, text: clean, tags: all }) : missing(id);
+  });
+
+  server.registerTool('set_tags', {
+    title: 'Set the tags of a task',
+    description: 'Replace all the tags of a task. A tag is one word (letters, digits, - or _), at most five per task; [] removes them all.',
+    inputSchema: { id, tags: z.array(z.string()).max(5).describe('The tags, with or without the #.') },
+    annotations: { destructiveHint: false, idempotentHint: true },
+  }, async ({ id, tags }) => {
+    const clean = cleanTags(tags);
+    if (!(await change('tags = ?3', id, JSON.stringify(clean)))) return missing(id);
+    await ensureTags(env, clean);
+    return say({ id, tags: clean });
   });
 
   server.registerTool('remove_task', {

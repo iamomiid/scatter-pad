@@ -9,6 +9,8 @@
   // "workers_dev": false,
   // "preview_urls": false,
   "assets": { "directory": "./public" },
+  // Workers AI, for auto-tagging new tasks with Cloudflare's Clef-flash decision model.
+  "ai": { "binding": "AI" },
   "d1_databases": [
     {
       "binding": "DB",

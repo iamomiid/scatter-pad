@@ -25,6 +25,8 @@
   --line:#CDC585;
   --ok:#2F7D4F;
   --focus:#2B56C9;
+  /* tag dots: a tag's colour is picked from its name, so it is the same on every device */
+  --tag0:#2F6FD6; --tag1:#D4691E; --tag2:#1F8F62; --tag3:#9B45C9; --tag4:#C2386A; --tag5:#0E8594; --tag6:#8A6A12; --tag7:#5560C9;
   --hand:"Shantell Sans","Comic Sans MS","Segoe Print","Bradley Hand",cursive;
   --fa:"Vazirmatn","Segoe UI",Tahoma,sans-serif;
   --ui:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
@@ -33,6 +35,7 @@
   :root{
     --paper:#141927; --dot:#2C3651; --ink:#EFE8A8; --ink-soft:#959CB8; --ink-done:#74755F;
     --strike:#FF6F61; --chip:#1E2538; --line:#353F5C; --ok:#6FCF97; --focus:#8FB0FF;
+    --tag0:#7FB2FF; --tag1:#F2A65A; --tag2:#8FD6B0; --tag3:#D7A6F5; --tag4:#F58FB0; --tag5:#6FD3DE; --tag6:#E3C46B; --tag7:#A3ABFF;
   }
 }
 
@@ -49,7 +52,7 @@ body{
   color:var(--ink); font:400 12px/1.4 var(--ui);
   -webkit-user-select:none; user-select:none;
 }
-p,h1{margin:0}
+p,h1,h2{margin:0}
 
 /* chrome */
 .bar{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:6px 16px; padding-block:12px 6px}
@@ -69,7 +72,7 @@ p,h1{margin:0}
 }
 .btn:hover:not(:disabled){border-color:var(--ink-soft)}
 .btn:disabled{opacity:.45; cursor:default}
-.btn:focus-visible,.txt:focus-visible,.tools button:focus-visible{outline:2px solid var(--focus); outline-offset:2px}
+.btn:focus-visible,.txt:focus-visible,.tools button:focus-visible,.set select:focus-visible{outline:2px solid var(--focus); outline-offset:2px}
 
 /* the field */
 #field{position:relative; min-height:0; cursor:text; --fs:28px; --maxw:100%}
@@ -82,7 +85,11 @@ p,h1{margin:0}
   width:max-content; max-width:min(24ch,var(--maxw));
   transform:translate(-50%,-50%) rotate(var(--tilt,0deg));
   font:400 var(--fs)/1.25 var(--hand);
+  transition:left .45s cubic-bezier(.2,.8,.2,1), top .45s cubic-bezier(.2,.8,.2,1), opacity .3s;
 }
+.task.drag,#field.still .task{transition:opacity .3s}
+.task.off{opacity:.2}
+.task.bye{opacity:0; pointer-events:none}
 .task.fa{font-family:var(--fa); font-size:calc(var(--fs)*.95); line-height:1.6}
 .task:hover,.task:focus-within{z-index:5}
 .task.drag{z-index:9}
@@ -106,7 +113,8 @@ p,h1{margin:0}
   display:flex; gap:3px; padding-left:6px; opacity:0; pointer-events:none; transition:opacity .12s;
 }
 .task.flip .tools{left:auto; right:100%; padding-left:0; padding-right:6px}
-.task:hover .tools,.task:focus-within .tools{opacity:1; pointer-events:auto}
+.task:hover .tools,.task:focus-within .tools,.task.picking .tools{opacity:1; pointer-events:auto}
+.task.picking{z-index:6}
 .task.drag .tools,.task.editing .tools,.task.editing .txt,.task.editing .strike{display:none}
 .tools button{
   all:unset; box-sizing:border-box; width:26px; height:26px; display:grid; place-items:center;
@@ -114,6 +122,41 @@ p,h1{margin:0}
 }
 .tools button:hover{color:var(--ink); border-color:var(--ink-soft)}
 .tools svg{width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round}
+
+/* tags */
+.tags{display:inline-flex; gap:max(3px,.12em); margin-inline-end:.3em; vertical-align:.12em}
+.tags:empty{display:none}
+.tags i{width:max(6px,.3em); height:max(6px,.3em); border-radius:50%; background:var(--c)}
+.legend{display:inline-flex; flex-wrap:wrap; gap:2px}
+.leg{
+  all:unset; display:inline-flex; align-items:center; gap:5px; padding:4px 7px; cursor:pointer;
+  border:1px solid transparent; border-radius:6px; color:var(--ink-soft);
+}
+.leg:hover{color:var(--ink)}
+.leg[aria-pressed="true"]{color:var(--ink); background:var(--chip); border-color:var(--focus)}
+.leg i,.popt i,.chip i{width:7px; height:7px; border-radius:50%; background:var(--c); flex:none}
+.leg:focus-visible,.popt:focus-visible,.chip:focus-visible{outline:2px solid var(--focus); outline-offset:1px}
+.picker{
+  position:fixed; z-index:30; width:190px; padding:6px; display:flex; flex-direction:column; gap:1px;
+  background:var(--chip); border:1px solid var(--line); border-radius:8px; box-shadow:0 10px 30px rgb(0 0 0 / .18);
+}
+#pickList{display:flex; flex-direction:column; gap:1px; max-height:240px; overflow-y:auto}
+.popt{all:unset; box-sizing:border-box; display:flex; align-items:center; gap:8px; padding:7px 8px; border-radius:6px; color:var(--ink); cursor:pointer}
+.popt span{flex-grow:1; overflow-wrap:anywhere}
+.popt:hover{background:var(--paper)}
+.popt svg{width:12px; height:12px; fill:none; stroke:var(--focus); stroke-width:2; stroke-linecap:round; stroke-linejoin:round; visibility:hidden}
+.popt[aria-pressed="true"] svg{visibility:visible}
+.pnote{padding:6px 8px; color:var(--ink-soft)}
+.pnew{display:flex; align-items:center; gap:8px; margin-top:4px; padding:7px 8px 3px; border-top:1px solid var(--line); color:var(--ink-soft)}
+.pnew input{all:unset; flex-grow:1; min-width:0; color:var(--ink); font:inherit; -webkit-user-select:text; user-select:text}
+.pnew input::placeholder{color:var(--ink-soft)}
+.wc .chip{
+  all:unset; display:inline-flex; align-items:center; gap:6px; margin-inline:3px; padding:4px 7px; cursor:pointer;
+  border:1px solid var(--line); border-radius:6px; background:var(--chip); color:var(--ink); font:400 11px/1 var(--ui);
+}
+.wc .chip.first{border-color:var(--focus)}
+.wc .chip.new{color:var(--ink-soft); cursor:default}
+.wc kbd{font:inherit; font-size:10px; color:var(--ink-soft); border:1px solid var(--line); border-radius:3px; padding:1px 3px}
 
 /* writing */
 .edit{
@@ -127,7 +170,6 @@ p,h1{margin:0}
   position:absolute; top:100%; left:50%; transform:translateX(-50%); margin-top:7px;
   font:400 11px/1 var(--ui); white-space:nowrap; color:var(--ink-soft);
 }
-.wc.over{color:var(--strike)}
 
 .toast{
   position:fixed; left:50%; bottom:calc(58px + env(safe-area-inset-bottom,0px)); transform:translateX(-50%);
@@ -136,9 +178,75 @@ p,h1{margin:0}
   background:var(--chip); border:1px solid var(--line); color:var(--ink);
 }
 
+/* settings */
+.panel{
+  width:min(420px,calc(100% - 32px)); max-height:calc(100% - 32px); overflow-y:auto; margin:auto; padding:0;
+  background:var(--chip); color:var(--ink); border:1px solid var(--line); border-radius:12px;
+  box-shadow:0 18px 50px rgb(0 0 0 / .25); font:400 12px/1.4 var(--ui);
+}
+.panel::backdrop{background:rgb(12 14 24 / .45)}
+.pbody{padding:14px 16px}
+.phead{display:flex; align-items:center; justify-content:space-between; padding-bottom:12px}
+.panel h2{font:600 22px/1.1 var(--hand)}
+.close{
+  all:unset; box-sizing:border-box; width:28px; height:28px; display:grid; place-items:center; cursor:pointer;
+  border-radius:6px; border:1px solid var(--line); color:var(--ink-soft);
+}
+.close:hover{color:var(--ink); border-color:var(--ink-soft)}
+.close svg{width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round}
+.choice{display:grid; grid-template-columns:1fr 1fr; gap:8px; padding-block:12px; border-top:1px solid var(--line)}
+.choice > b{grid-column:1 / -1; font-weight:500}
+.opt{position:relative; display:block; padding:9px 10px; border:1px solid var(--line); border-radius:8px; background:var(--paper); cursor:pointer}
+.opt:hover{border-color:var(--ink-soft)}
+.opt input{position:absolute; opacity:0; pointer-events:none}
+.opt:has(input:checked){border-color:var(--focus); box-shadow:inset 0 0 0 1px var(--focus)}
+.opt:has(input:focus-visible){outline:2px solid var(--focus); outline-offset:2px}
+.opt b{display:block; font-weight:500; padding-bottom:3px}
+.opt small{color:var(--ink-soft); font-size:11px}
+.set{display:grid; grid-template-columns:1fr auto; align-items:center; gap:3px 12px; padding-block:12px; border-top:1px solid var(--line)}
+.set b{font-weight:500}
+.set small{grid-column:1; color:var(--ink-soft); font-size:11px}
+.set select{
+  grid-column:2; grid-row:1 / span 2; cursor:pointer;
+  font:500 12px/1 var(--ui); color:var(--ink); background:var(--paper);
+  border:1px solid var(--line); border-radius:6px; padding:6px 8px;
+}
+.panel .note{color:var(--ink-soft); font-size:11px; padding-top:10px; border-top:1px solid var(--line)}
+.close:focus-visible{outline:2px solid var(--focus); outline-offset:2px}
+.tagset{padding-block:12px; border-top:1px solid var(--line); display:flex; flex-direction:column; gap:8px}
+.tshead{display:flex; align-items:center; justify-content:space-between; gap:12px}
+.tshead b{font-weight:500}
+.toggle{display:inline-flex; align-items:center; gap:7px; color:var(--ink-soft); cursor:pointer}
+.toggle input{accent-color:var(--focus); margin:0}
+.tagset > small{color:var(--ink-soft); font-size:11px}
+.trow{border:1px solid var(--line); border-radius:8px; background:var(--paper)}
+.trow[open]{border-color:var(--ink-soft)}
+.trow summary{display:flex; align-items:center; gap:8px; padding:8px 10px; cursor:pointer; list-style:none}
+.trow summary::-webkit-details-marker{display:none}
+.trow summary i,.sw{width:9px; height:9px; border-radius:50%; background:var(--c); flex:none}
+.trow summary b{font-weight:500}
+.trow summary span{color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:1}
+.tbody{display:flex; flex-direction:column; gap:8px; padding:2px 10px 10px}
+.tbody label{display:flex; flex-direction:column; gap:4px; color:var(--ink-soft); font-size:11px}
+.tbody input,.tbody textarea,.tadd input{
+  font:400 12px/1.4 var(--ui); color:var(--ink); background:var(--chip); resize:vertical;
+  border:1px solid var(--line); border-radius:6px; padding:6px 8px; -webkit-user-select:text; user-select:text;
+}
+.tbody input:focus-visible,.tbody textarea:focus-visible,.tadd input:focus-visible,.trow summary:focus-visible{outline:2px solid var(--focus); outline-offset:1px}
+.tfoot{display:flex; align-items:center; justify-content:space-between; gap:8px}
+.swatches{display:flex; gap:4px}
+.swatches button{all:unset; width:22px; height:22px; display:grid; place-items:center; border-radius:6px; cursor:pointer; border:1px solid transparent}
+.swatches button[aria-pressed="true"]{border-color:var(--ink)}
+.swatches button:focus-visible{outline:2px solid var(--focus)}
+.swatches .sw{width:11px; height:11px}
+.tdel{all:unset; color:var(--strike); cursor:pointer; padding:4px 2px}
+.tdel:focus-visible{outline:2px solid var(--focus)}
+.tadd{display:flex; align-items:center; gap:8px; color:var(--ink-soft)}
+.tadd input{flex:1}
+
 @media (max-width:720px){ .hint{display:none} .date{font-size:19px} }
 @media (prefers-reduced-motion: reduce){
-  .strike path,.task.done .strike path,.txt,.tools{transition:none}
+  .strike path,.task.done .strike path,.txt,.tools,.task{transition:none}
 }
 </style>
 </head>
@@ -147,6 +255,7 @@ p,h1{margin:0}
 <header class="bar">
   <h1 class="date" id="date">Today</h1>
   <p class="meta">
+    <span class="legend" id="legend" aria-label="Show only one tag"></span>
     <span id="count">Nothing written</span>
     <span class="status" id="status" data-s="wait"><i></i><span id="statusText">Opening</span></span>
     <button class="btn" id="signin" type="button" hidden>Sign in</button>
@@ -161,12 +270,43 @@ p,h1{margin:0}
 </main>
 
 <footer class="bar foot">
-  <p class="hint">Click anywhere to write<b>·</b>click a task to cross it off<b>·</b>drag to move<b>·</b>or just start typing</p>
+  <p class="hint"><span id="hintAll">Click anywhere to write<b>·</b>add #tags as you type<b>·</b>click a task to cross it off<b>·</b><span id="dragHint">drag to reorder</span></span><span id="hintFilter" hidden></span></p>
   <div class="acts">
-    <button class="btn" id="tidy" type="button" disabled>Tidy up</button>
     <button class="btn" id="sweep" type="button" disabled>Sweep crossed off</button>
+    <button class="btn" id="settingsBtn" type="button" aria-haspopup="dialog">Settings</button>
   </div>
 </footer>
+
+<dialog class="panel" id="settings" aria-labelledby="settingsTitle">
+  <div class="pbody">
+    <div class="phead">
+      <h2 id="settingsTitle">Settings</h2>
+      <button class="close" id="settingsClose" type="button" aria-label="Close settings"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+    </div>
+    <div class="choice" role="radiogroup" aria-labelledby="layoutLabel">
+      <b id="layoutLabel">Layout</b>
+      <label class="opt"><input type="radio" name="layout" value="rows"><b>Loose rows</b><small>In the order you wrote them. Drag to reorder.</small></label>
+      <label class="opt"><input type="radio" name="layout" value="spread"><b>Soft spread</b><small>Scattered and nudged apart to fill the page. Drag anywhere.</small></label>
+    </div>
+    <div class="tagset">
+      <div class="tshead">
+        <b>Tags</b>
+        <label class="toggle"><input type="checkbox" id="autoTag">Auto-tag new tasks</label>
+      </div>
+      <small>With auto-tag on, Cloudflare's Clef model picks tags for each task you write without one, using these descriptions.</small>
+      <div id="tagList"></div>
+      <label class="tadd"><span aria-hidden="true">+</span><input id="tagNew" type="text" placeholder="new tag" maxlength="25" autocomplete="off" spellcheck="false" aria-label="New tag"></label>
+    </div>
+    <label class="set"><b>When filtering</b><select id="filterMode"><option value="dim">Dim the others</option><option value="hide">Hide the others</option></select><small>What happens to tasks without the tag you picked at the top.</small></label>
+    <label class="set"><b>Auto sweep</b><select id="autoSweep"></select><small>Takes a task off the page this long after you cross it off.</small></label>
+    <p class="note">Undo on the toast brings swept tasks back.</p>
+  </div>
+</dialog>
+
+<div class="picker" id="picker" role="dialog" aria-label="Tags for this task" hidden>
+  <div id="pickList"></div>
+  <label class="pnew"><span aria-hidden="true">+</span><input id="pickNew" type="text" placeholder="new tag" maxlength="25" autocomplete="off" spellcheck="false" aria-label="New tag"></label>
+</div>
 
 <div class="toast" id="toast" role="status" hidden>
   <span id="toastMsg"></span>
@@ -182,8 +322,12 @@ p,h1{margin:0}
   const FA = /[؀-ۿݐ-ݿﭐ-﷿ﹰ-﻿]/;   // Arabic-script text gets Vazirmatn
   const ICON_EDIT = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 13l.6-3L11 2.6l2.4 2.4L6 12.4z"/><path d="M9.6 4l2.4 2.4"/></svg>';
   const ICON_X = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
+  const ICON_TAG = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 2.5h5.2l6 6-5.2 5.2-6-6z"/><circle cx="5.6" cy="5.6" r=".9"/></svg>';
+  const ICON_CHECK = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5"/></svg>';
+  const HINT = 'Enter to keep · Esc to drop';
+  const FKEY = 'scatterpad.filter';
 
-  const tasks = new Map();   // id -> {id,text,x,y,tilt,done,created_at,done_at}; x,y are the task's centre, 0..1 of the field
+  const tasks = new Map();   // id -> {id,text,x,y,tilt,done,created_at,done_at,sort,tags}; x,y are where it was last drawn, 0..1 of the field
   const tomb = new Map();    // tasks taken off the page, kept until the server has flagged them
   const dirty = new Set();   // ids with changes the server has not confirmed yet
   const inflight = new Set();
@@ -191,6 +335,15 @@ p,h1{margin:0}
   let loaded = false, mode = 'opening';   // opening | synced | error | signin | setup
   let flushing = false, pulling = false, rev = 0, retryMs = 0, retryTimer = 0, held = null;
   let draft = null, undoFn = null, toastTimer = 0, dragEndAt = 0, FS = 28;
+  let drag = null, grid = null;
+  let filter = null, picking = null;   // filter: the one tag shown (this device only); picking: the task whose tag picker is open   // drag: the task being moved and the slot it would land in; grid: the last layout
+  // Seconds after a task is crossed off before it is swept; 0 is off. Mirrors SWEEP_CHOICES in the Worker.
+  const SWEEP_CHOICES = [[0, 'Off'], [5, 'After 5 s'], [10, 'After 10 s'], [30, 'After 30 s'], [60, 'After 1 min'], [300, 'After 5 min'], [900, 'After 15 min']];
+  const CHOICES = { auto_sweep: SWEEP_CHOICES.map(([m]) => m), layout: ['rows', 'spread'], auto_tag: [false, true], filter_mode: ['dim', 'hide'] };
+  const prefs = { auto_sweep: 0, layout: 'rows', auto_tag: false, filter_mode: 'dim' };
+  const tagMeta = new Map();   // tag name -> { color: 0..7, description }, as the server keeps them
+  const spreading = () => prefs.layout === 'spread';
+  let prefsDirty = false, prefsRev = 0;
 
   // ---------- data ----------
   const num = (v, lo, hi, d) => (typeof v === 'number' && isFinite(v)) ? Math.min(hi, Math.max(lo, v)) : d;
@@ -199,12 +352,57 @@ p,h1{margin:0}
       id, text: String(d.text ?? '').slice(0, 80),
       x: num(d.x, 0, 1, .5), y: num(d.y, 0, 1, .5), tilt: num(d.tilt, -4, 4, 0),
       done: d.done === true, created_at: num(d.created_at, 0, 9e15, 0), done_at: num(d.done_at, 0, 9e15, null),
+      sort: num(d.sort, -9e15, 9e15, null), tags: cleanTags(d.tags),
     };
   }
+
+  // Same rules as src/text.js: a tag is one word of letters, digits, - or _, lower case, at most five a task.
+  const TAG = /^[\p{L}\p{N}_-]{1,24}$/u;
+  function cleanTags(v) {
+    const out = [];
+    for (const x of Array.isArray(v) ? v : []) {
+      const t = typeof x === 'string' ? x.replace(/^#/, '').toLowerCase() : '';
+      if (TAG.test(t) && !out.includes(t)) out.push(t);
+    }
+    return out.slice(0, 5);
+  }
+  // "send email #work" gives { text: 'send email', tags: ['work'] }.
+  function splitTags(s) {
+    const tags = [];
+    const text = s.replace(/(^|\s)#([\p{L}\p{N}_-]+)/gu, (_, space, tag) => { tags.push(tag); return space; });
+    return { text: text.replace(/\s+/g, ' ').trim().slice(0, 80), tags: cleanTags(tags) };
+  }
+  // Each tag's colour is kept by the server, so tags never share one by accident. A tag the server has not
+  // seen yet borrows a colour from its name until the next save brings its own.
+  function tagColor(tag) {
+    const m = tagMeta.get(tag);
+    if (m) return `var(--tag${m.color})`;
+    let h = 0;
+    for (const c of tag) h = (h * 31 + c.codePointAt(0)) >>> 0;
+    return `var(--tag${h % 8})`;
+  }
+  function setTagMeta(list) {
+    if (!Array.isArray(list)) return;
+    tagMeta.clear();
+    for (const t of list) {
+      const [name] = cleanTags([t?.name]);
+      if (name) tagMeta.set(name, { color: num(t.color, 0, 7, 0) | 0, description: String(t.description || '').slice(0, 200) });
+    }
+  }
+  // Tags in use, most used first; the filtered one stays listed even when no task has it any more.
+  // With known: every tag the server keeps too, for the picker and suggestions.
+  function allTags(known = false) {
+    const n = new Map();
+    for (const t of tasks.values()) for (const g of t.tags) n.set(g, (n.get(g) || 0) + 1);
+    if (filter && !n.has(filter)) n.set(filter, 0);
+    if (known) for (const g of tagMeta.keys()) if (!n.has(g)) n.set(g, 0);
+    return [...n].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).map(([g]) => g);
+  }
+  const dot = tag => { const i = document.createElement('i'); i.style.setProperty('--c', tagColor(tag)); return i; };
   const newId = () => 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
   function saveCache() {
-    try { localStorage.setItem(KEY, JSON.stringify({ tasks: [...tasks.values()], tomb: [...tomb.values()], dirty: [...dirty] })); } catch {}
+    try { localStorage.setItem(KEY, JSON.stringify({ tasks: [...tasks.values()], tomb: [...tomb.values()], dirty: [...dirty], prefs, prefsDirty, tagMeta: [...tagMeta] })); } catch {}
   }
   function loadCache() {
     try {
@@ -213,13 +411,20 @@ p,h1{margin:0}
       for (const d of c.tasks || []) if (d && typeof d.id === 'string') tasks.set(d.id, clean(d.id, d));
       for (const d of c.tomb || []) if (d && typeof d.id === 'string' && !tasks.has(d.id)) tomb.set(d.id, clean(d.id, d));
       for (const id of c.dirty || []) if (tasks.has(id) || tomb.has(id)) dirty.add(id);
+      setPrefs(c.prefs); prefsDirty = c.prefsDirty === true;
+      setTagMeta((c.tagMeta || []).map(([name, m]) => ({ name, ...m })));
     } catch {}
+  }
+
+  function setPrefs(p) {
+    if (!p || typeof p !== 'object') return;
+    for (const k in prefs) if (CHOICES[k].includes(p[k])) prefs[k] = p[k];
   }
 
   const isBusy = id => dirty.has(id) || inflight.has(id) || held === id || (draft && draft.id === id);
 
-  async function api(method, body) {
-    const res = await fetch('/api/tasks', {
+  async function api(method, body, path = '/api/tasks') {
+    const res = await fetch(path, {
       method, redirect: 'manual', credentials: 'same-origin', cache: 'no-store',
       headers: body ? { 'content-type': 'application/json' } : undefined,
       body: body ? JSON.stringify(body) : undefined,
@@ -244,13 +449,13 @@ p,h1{margin:0}
   }
 
   // Fetch the page as the server has it. Anything changed here in the meantime wins until it is sent.
-  async function pull() {
-    if (pulling) return;
-    pulling = true;
+  // Calls made while a fetch is out share it, so a caller can wait for a page that is up to date.
+  function pull() { return pulling ||= fetchPage().finally(() => { pulling = false; }); }
+  async function fetchPage() {
     const at = rev;
     try {
       const data = await api('GET');
-      if (at !== rev) { pulling = false; return void setTimeout(pull, 300); }
+      if (at !== rev) return void setTimeout(pull, 300);
       const seen = new Set();
       for (const r of data.tasks || []) {
         if (!r || typeof r.id !== 'string') continue;
@@ -258,9 +463,26 @@ p,h1{margin:0}
         if (!isBusy(r.id)) tasks.set(r.id, clean(r.id, r));
       }
       for (const id of [...tasks.keys()]) if (!seen.has(id) && !isBusy(id)) tasks.delete(id);
-      loaded = true; ok(); saveCache(); render(); flush();
+      setTagMeta(data.tags);
+      loaded = true; ok(); saveCache(); render(); flush(); syncPrefs();
     } catch (e) { fail(e); render(); }
-    pulling = false;
+  }
+
+  // Settings travel separately, so a database without the settings table still shows the page.
+  async function syncPrefs() {
+    const at = prefsRev;
+    try {
+      if (prefsDirty) {
+        await api('PUT', { settings: { ...prefs } }, '/api/settings');
+        if (at === prefsRev) prefsDirty = false;
+      } else {
+        const data = await api('GET', null, '/api/settings'), was = prefs.layout, wasMode = prefs.filter_mode;
+        if (at === prefsRev && !prefsDirty) setPrefs(data.settings);
+        if (prefs.layout !== was) render(null, true);
+        else if (prefs.filter_mode !== wasMode) render();
+      }
+      saveCache(); showPrefs();
+    } catch {}
   }
 
   async function flush() {
@@ -274,7 +496,16 @@ p,h1{margin:0}
       dirty.delete(id); inflight.add(id);
     }
     try {
-      if (payload.length) await api('PUT', { tasks: payload });
+      if (payload.length) {
+        const res = await api('PUT', { tasks: payload });
+        setTagMeta(res.tags);
+        // Tags the auto-tagger chose, for tasks that still have none here.
+        for (const [id, tags] of Object.entries(res.labeled || {})) {
+          const t = tasks.get(id);
+          if (t && !t.tags.length) t.tags = cleanTags(tags);
+        }
+        render();
+      }
       for (const p of payload) if (p.archived && !dirty.has(p.id) && !tasks.has(p.id)) tomb.delete(p.id);
       inflight.clear(); ok();
     } catch (e) {
@@ -285,10 +516,11 @@ p,h1{margin:0}
     if (dirty.size && mode === 'synced') flush();
   }
 
-  function commit(ids) {
+  // pin: in soft spread, a task that just landed somewhere on purpose; it holds still while the rest make room.
+  function commit(ids, pin = null) {
     rev++;
     ids.forEach(id => dirty.add(id));
-    saveCache(); render(); flush();
+    saveCache(); render(pin); flush();
   }
 
   // ---------- geometry ----------
@@ -298,37 +530,152 @@ p,h1{margin:0}
     for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
     return () => { h |= 0; h = h + 0x6D2B79F5 | 0; let t = Math.imul(h ^ h >>> 15, 1 | h); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
   }
+  // Tasks read in this order: the saved sort, or when they were written.
+  const rank = t => t.sort ?? t.created_at;
+  const ordered = () => [...tasks.values()].sort((a, b) => rank(a) - rank(b) || (a.id < b.id ? -1 : 1));
+  // The ones on screen: a "hide the others" filter takes the rest out of the rows altogether.
+  const shownInOrder = () => ordered().filter(t => els.has(t.id) && !els.get(t.id).hidden);
+
+  // A grid sized to the page for n tasks of roughly these sizes: about as many columns as the page's shape
+  // suggests, cells no wider than a typical task needs, the whole block centred a little above the middle.
+  function makeGrid(n, sizes) {
+    const W = field.clientWidth, H = field.clientHeight, gx = FS * 1.6, gy = FS * 1.1;
+    const typical = i => sizes.map(s => s[i]).sort((a, b) => a - b)[Math.floor(sizes.length * .85)] || 0;
+    const cellW = typical(0) + gx, cellH = typical(1) + gy;
+    const cols = Math.max(1, Math.min(n, Math.floor((W - 8) / cellW), Math.round(Math.sqrt(n * W * cellH / (H * cellW)))));
+    const rows = Math.ceil(n / cols);
+    const cw = Math.min((W - 8) / cols, cellW * 1.5), rh = Math.min(H / rows, cellH * 1.8);
+    const left = (W - cw * cols) / 2, top = Math.max(0, (H - rh * rows) * .42);
+    return { n, cw, rh, at: i => ({ x: left + (i % cols + .5) * cw, y: top + (Math.floor(i / cols) + .5) * rh }) };
+  }
+  // The slot nearest a point, for dropping a dragged task.
+  function nearest(x, y) {
+    let best = 0, bd = Infinity;
+    for (let i = 0; i < grid.n; i++) {
+      const c = grid.at(i), d = ((c.x - x) / grid.cw) ** 2 + ((c.y - y) / grid.rh) ** 2;
+      if (d < bd) { bd = d; best = i; }
+    }
+    return best;
+  }
   function gap(a, b) {
     const dx = Math.abs(a.x - b.x) - (a.w + b.w) / 2, dy = Math.abs(a.y - b.y) - (a.h + b.h) / 2;
     if (dx < 0 && dy < 0) return Math.max(dx, dy);
     return Math.hypot(Math.max(dx, 0), Math.max(dy, 0));
   }
-  function rects() {
-    const out = [];
-    for (const el of els.values()) out.push({ x: parseFloat(el.style.left) || 0, y: parseFloat(el.style.top) || 0, w: el.offsetWidth, h: el.offsetHeight });
-    return out;
-  }
-  // The emptiest place for a w×h block: best of many random tries, with the edges as mild obstacles.
-  function freeSpot(w, h, placed, tries = 180) {
-    const W = field.clientWidth, H = field.clientHeight;
-    if (!placed.length) return { x: W / 2, y: H * .45, w, h };
+  // The emptiest place for a w×h block, for a task typed in soft spread: best of many random tries.
+  function freeSpot(w, h) {
+    const W = field.clientWidth, H = field.clientHeight, placed = [];
+    for (const el of els.values()) placed.push({ x: parseFloat(el.style.left) || 0, y: parseFloat(el.style.top) || 0, w: el.offsetWidth, h: el.offsetHeight });
+    if (!placed.length) return { x: W / 2, y: H * .45 };
     let best = null, bs = -Infinity;
-    for (let i = 0; i < tries; i++) {
+    for (let i = 0; i < 180; i++) {
       const c = { x: w / 2 + 4 + Math.random() * Math.max(1, W - w - 8), y: h / 2 + 4 + Math.random() * Math.max(1, H - h - 8), w, h };
-      const edge = Math.min(c.x - w / 2, W - c.x - w / 2, c.y - h / 2, H - c.y - h / 2);
-      let s = edge * 2 + 12;
+      let s = Math.min(c.x - w / 2, W - c.x - w / 2, c.y - h / 2, H - c.y - h / 2) * 2 + 12;
       for (const p of placed) { s = Math.min(s, gap(c, p)); if (s < bs) break; }
       if (s > bs) { bs = s; best = c; }
     }
     return best;
   }
 
+  // Soft spread: tasks push each other apart, and away from the edges, until the page is evenly filled.
+  // The fuller the page, the less room each one asks for. Moves are saved so every device shows the same page.
+  // shake: start from a slightly jumbled page, so switching over from rows does not leave a stretched grid.
+  function spread(pin, shake = false) {
+    const W = field.clientWidth, H = field.clientHeight;
+    if (!W || !H) return;
+    const b = [];
+    for (const [id, el] of els) {
+      const t = tasks.get(id), w = el.offsetWidth, h = el.offsetHeight;
+      const r = rng(id + '~'), jx = shake ? (r() - .5) * W * .14 : 0, jy = shake ? (r() - .5) * H * .18 : 0;
+      if (t) b.push({ t, w, h, x: clampC(t.x * W + jx, w, W), y: clampC(t.y * H + jy, h, H), pin: id === pin, fx: 0, fy: 0 });
+    }
+    if (!b.length) return;
+    relax(b, W, H);
+    const moved = [];
+    for (const a of b) {
+      const x = a.x / W, y = a.y / H;
+      if (Math.abs(x - a.t.x) > .004 || Math.abs(y - a.t.y) > .004) { a.t.x = x; a.t.y = y; moved.push(a.t.id); }
+    }
+    if (!moved.length) return;
+    rev++; moved.forEach(id => dirty.add(id));
+    saveCache(); layout(); flush();
+  }
+  // While "hide the others" thins the page, the tasks left gather in a loose cluster near the middle. That
+  // arrangement is only a view: nothing is saved, and clearing the filter glides every task back to where it was.
+  let view = null, viewShape = '';   // view: task id -> {x, y}, 0..1 of the field
+  let changedInView = false;         // a task came, went or was dropped while the view was up
+  function spreadView(pin) {
+    const W = field.clientWidth, H = field.clientHeight;
+    if (!W || !H) return;
+    // Each task starts in its cell of the same centred grid loose rows uses, nudged off centre, then the cluster
+    // is loosened just enough to keep a small gap. A task just written or dropped holds its spot, and while it
+    // does, the others keep theirs from the view so far.
+    const list = shownInOrder(), sizes = list.map(t => [els.get(t.id).offsetWidth, els.get(t.id).offsetHeight]);
+    const g = makeGrid(list.length, sizes), prev = view, b = [];
+    list.forEach((t, i) => {
+      const [w, h] = sizes[i], c = g.at(i), r = rng(t.id + '^');
+      const seed = {
+        x: (c.x + (r() - .5) * 2 * Math.max(0, Math.min(g.cw * .14, (g.cw - w) / 2 - 4))) / W,
+        y: (c.y + (r() - .5) * 2 * Math.max(0, Math.min(g.rh * .16, (g.rh - h) / 2 - 2))) / H,
+      };
+      const at = t.id === pin ? t : (pin && prev?.get(t.id)) || seed;
+      b.push({ t, w, h, x: clampC(at.x * W, w, W), y: clampC(at.y * H, h, H), pin: t.id === pin, fx: 0, fy: 0 });
+    });
+    view = new Map();
+    if (b.length) relax(b, W, H, 1.25);
+    for (const a of b) view.set(a.t.id, { x: a.x / W, y: a.y / H });
+    layout();
+  }
+  // Pushes a set of boxes ({x, y, w, h, pin}, in px) apart until they fill the page evenly, or, given room,
+  // only until each keeps that much space around it (1 = just touching, plus the margin).
+  function relax(b, W, H, room = null) {
+    const M = FS * .7;
+    const fill = b.reduce((s, a) => s + (a.w + M) * (a.h + M), 0) / (W * H);
+    const R = room ?? Math.max(1.15, Math.min(2.6, .95 / Math.sqrt(Math.max(fill, .05))));
+    for (let it = 0, N = 240; it < N; it++) {
+      const k = (.35 * (1 - it / N) + .03) * .25;
+      for (const a of b) {
+        let fx = 0, fy = 0;
+        for (const o of b) {
+          if (o === a) continue;
+          const sx = (a.w + o.w) / 2 + M, sy = (a.h + o.h) / 2 + M;
+          let nx = (a.x - o.x) / sx, ny = (a.y - o.y) / sy, d = Math.hypot(nx, ny);
+          if (d >= R) continue;
+          if (d < 1e-3) { nx = a.t.id < o.t.id ? -.01 : .01; ny = 0; d = .01; }
+          const f = (R - d) / d;
+          fx += nx * f * sx; fy += ny * f * sy;
+        }
+        const ex = a.w / 2 + M, ey = a.h / 2 + M, er = 1.4;
+        const l = (a.x - ex) / ex, r = (W - a.x - ex) / ex, tp = (a.y - ey) / (ey * 2.2), bt = (H - a.y - ey) / (ey * 2.2);
+        if (l < er) fx += (er - l) * ex;
+        if (r < er) fx -= (er - r) * ex;
+        if (tp < er) fy += (er - tp) * ey;
+        if (bt < er) fy -= (er - bt) * ey;
+        a.fx = fx; a.fy = fy;
+      }
+      for (const a of b) if (!a.pin) { a.x = clampC(a.x + a.fx * k, a.w, W); a.y = clampC(a.y + a.fy * k, a.h, H); }
+    }
+  }
+  // Which tasks are on the page and what they say. Soft spread re-runs when this changes.
+  const shapeOf = () => [...tasks.values()].map(t => t.id + ':' + t.text + ':' + t.tags).sort().join('|');
+  let shape = '';
+
+  // Sets left/top. The first time, without the glide, so a new task does not fly in from the middle.
+  function place(el, x, y) {
+    const first = !el.style.left;
+    if (first) el.style.transition = 'none';
+    el.style.left = x.toFixed(1) + 'px'; el.style.top = y.toFixed(1) + 'px';
+    if (first) { el.offsetWidth; el.style.transition = ''; }
+  }
+
   // ---------- drawing ----------
   function build(t) {
     const el = document.createElement('div');
     el.className = 'task'; el.dataset.id = t.id;
-    el.innerHTML = '<button type="button" class="txt" dir="auto"></button><svg class="strike" aria-hidden="true"></svg>' +
-      '<span class="tools"><button type="button" data-act="edit" aria-label="Edit task" title="Edit">' + ICON_EDIT +
+    el.innerHTML = '<button type="button" class="txt" dir="auto"><span class="tags" aria-hidden="true"></span><span class="lbl"></span></button>' +
+      '<svg class="strike" aria-hidden="true"></svg><span class="tools">' +
+      '<button type="button" data-act="tag" aria-label="Tag task" title="Tags">' + ICON_TAG + '</button>' +
+      '<button type="button" data-act="edit" aria-label="Edit task" title="Edit">' + ICON_EDIT +
       '</button><button type="button" data-act="remove" aria-label="Remove task" title="Remove">' + ICON_X + '</button></span>';
     return el;
   }
@@ -355,24 +702,60 @@ p,h1{margin:0}
   function layout() {
     const W = field.clientWidth, H = field.clientHeight;
     if (!W || !H) return;
-    const n = Math.max(tasks.size + (draft && !draft.id ? 1 : 0), 10);
-    FS = Math.max(15, Math.min(32, Math.sqrt(W * H / (89 * n))));
+    if (spreading()) return layoutSpread(W, H);
+    layoutRows(W, H);
+  }
+
+  // Soft spread: each task where it was put (or pushed), clamped inside the page.
+  function layoutSpread(W, H) {
+    let shown = draft && !draft.id ? 1 : 0;
+    for (const el of els.values()) if (!el.hidden) shown++;
+    FS = Math.max(15, Math.min(32, Math.sqrt(W * H / (89 * Math.max(shown, 10)))));
     field.style.setProperty('--fs', FS.toFixed(1) + 'px');
     field.style.setProperty('--maxw', (W - 8) + 'px');
-    const items = [];
-    for (const [id, el] of els) { const t = tasks.get(id); if (t) items.push([t, el, el.offsetWidth, el.offsetHeight]); }
-    const dw = draft && !draft.id ? [draft.el.offsetWidth, draft.el.offsetHeight] : null;
-    for (const [t, el, w, h] of items) {
-      const cx = clampC(t.x * W, w, W), cy = clampC(t.y * H, h, H);
-      el.style.left = cx.toFixed(1) + 'px'; el.style.top = cy.toFixed(1) + 'px';
-      el.classList.toggle('flip', cx + w / 2 + 70 > W);
+    for (const [id, el] of els) {
+      const t = tasks.get(id);
+      if (!t || held === id || el.hidden) continue;
+      const at = view?.get(id) || t, w = el.offsetWidth, h = el.offsetHeight, cx = clampC(at.x * W, w, W), cy = clampC(at.y * H, h, H);
+      place(el, cx, cy);
+      el.classList.toggle('flip', cx + w / 2 + 100 > W);
       strike(el, t, w, h);
     }
-    if (dw) {
-      const cx = clampC(draft.x * W, dw[0], W), cy = clampC(draft.y * H, dw[1], H - 18);
-      draft.el.style.left = cx.toFixed(1) + 'px'; draft.el.style.top = cy.toFixed(1) + 'px';
-      draft.x = cx / W; draft.y = cy / H;
+    if (draft && !draft.id) {
+      const cx = clampC(draft.x * W, draft.el.offsetWidth, W), cy = clampC(draft.y * H, draft.el.offsetHeight, H - 18);
+      place(draft.el, cx, cy); draft.x = cx / W; draft.y = cy / H;
     }
+  }
+
+  // Loose rows: each task sits in its cell of the grid, nudged a little off centre (always the same way for
+  // the same task) so the page still looks handwritten. Anything that changes the order glides into place.
+  function layoutRows(W, H) {
+    const list = shownInOrder();
+    if (drag) { const k = list.indexOf(drag.t); if (k >= 0) { list.splice(k, 1); list.splice(drag.to, 0, drag.t); } }
+    const items = list.map(t => [t, els.get(t.id)]);
+    if (draft && !draft.id) items.push([null, draft.el]);
+    FS = Math.max(15, Math.min(32, Math.sqrt(W * H / (89 * Math.max(items.length, 10)))));
+    field.style.setProperty('--fs', FS.toFixed(1) + 'px');
+    field.style.setProperty('--maxw', (W - 8) + 'px');
+    grid = makeGrid(items.length, items.map(([, el]) => [el.offsetWidth, el.offsetHeight]));
+    field.style.setProperty('--maxw', Math.max(FS * 5, grid.cw - FS * .6).toFixed(1) + 'px');
+    items.forEach(([t, el], i) => {
+      const w = el.offsetWidth, h = el.offsetHeight, c = grid.at(i), r = rng((t ? t.id : 'draft') + '/');
+      const jx = (r() - .5) * 2 * Math.max(0, Math.min(grid.cw * .12, (grid.cw - w) / 2 - 4));
+      const jy = (r() - .5) * 2 * Math.max(0, Math.min(grid.rh * .14, (grid.rh - h) / 2 - 2));
+      const cx = clampC(c.x + jx, w, W), cy = clampC(c.y + jy, h, t ? H : H - 18);
+      if (!t) return place(el, cx, cy);
+      t.x = cx / W; t.y = cy / H;
+      if (held === t.id) return;   // it follows the pointer until dropped
+      place(el, cx, cy);
+      el.classList.toggle('flip', cx + w / 2 + 100 > W);
+      strike(el, t, w, h);
+    });
+  }
+  // Re-lays the page without the glide, for a resized window or freshly loaded fonts.
+  function relayout() {
+    field.classList.add('still'); layout();
+    requestAnimationFrame(() => field.classList.remove('still'));
   }
 
   function chrome() {
@@ -380,9 +763,27 @@ p,h1{margin:0}
     for (const t of tasks.values()) t.done ? done++ : open++;
     $('count').textContent = !open && !done ? 'Nothing written' : !open ? `All ${done} crossed off`
       : done ? `${open} to do · ${done} crossed off` : `${open} to do`;
+    if (filter) {
+      let shown = 0;
+      for (const t of tasks.values()) if (!t.done && t.tags.includes(filter)) shown++;
+      $('count').textContent = `${shown} of ${open} to do`;
+    }
+    const tags = allTags(), key = tags.map(g => g + tagColor(g)).join(' ') + '|' + filter;
+    if ($('legend').dataset.key !== key) {
+      $('legend').dataset.key = key;
+      $('legend').replaceChildren(...tags.map(g => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'leg'; b.dataset.tag = g; b.dir = 'auto';
+        b.setAttribute('aria-pressed', String(g === filter));
+        b.title = g === filter ? 'Show every task' : `Show only #${g}`;
+        b.append(dot(g), g);
+        return b;
+      }));
+    }
+    $('hintAll').hidden = !!filter; $('hintFilter').hidden = !filter;
+    if (filter) $('hintFilter').textContent = `Showing #${filter} · new tasks get #${filter} · Esc to show all`;
     $('sweep').disabled = !done;
     $('sweep').textContent = done ? `Sweep ${done} crossed off` : 'Sweep crossed off';
-    $('tidy').disabled = tasks.size < 2;
     const s = mode === 'opening' ? ['wait', 'Opening']
       : mode === 'signin' ? ['err', 'Signed out. Kept on this device']
       : mode === 'setup' ? ['err', 'Locked until Cloudflare Access is on']
@@ -392,15 +793,25 @@ p,h1{margin:0}
     $('signin').hidden = mode !== 'signin';
     $('empty').hidden = tasks.size > 0 || !!draft;
     $('emptyTitle').textContent = loaded ? 'A clear page.' : 'Opening your pad';
+    $('dragHint').textContent = spreading() ? 'drag to move' : 'drag to reorder';
   }
 
-  function render() {
-    for (const [id, el] of els) if (!tasks.has(id)) { el.remove(); els.delete(id); }
+  // force: spread the page even if no task came or went (a task was dropped, or the layout was switched).
+  let hid = false;   // whether the last render hid any task
+  function render(pin = null, force = false) {
+    let hiding = false;
+    for (const [id, el] of els) if (!tasks.has(id)) { els.delete(id); el.classList.add('bye'); setTimeout(() => el.remove(), 300); }
     for (const t of tasks.values()) {
       let el = els.get(t.id);
       if (!el) { el = build(t); els.set(t.id, el); field.appendChild(el); }
-      const txt = el.querySelector('.txt');
-      if (txt.textContent !== t.text) txt.textContent = t.text;
+      const txt = el.querySelector('.txt'), lbl = el.querySelector('.lbl'), tk = t.tags.map(g => g + tagColor(g)).join(' ');
+      if (lbl.textContent !== t.text) lbl.textContent = t.text;
+      if (el.dataset.tags !== tk) { el.dataset.tags = tk; el.querySelector('.tags').replaceChildren(...t.tags.map(dot)); }
+      txt.setAttribute('aria-label', t.tags.length ? `${t.text}, tagged ${t.tags.join(', ')}` : t.text);
+      const out = !!filter && !t.tags.includes(filter);
+      el.hidden = out && prefs.filter_mode === 'hide';
+      el.classList.toggle('off', out && prefs.filter_mode === 'dim');
+      hiding ||= el.hidden;
       txt.setAttribute('aria-pressed', String(t.done));
       txt.title = t.done ? 'Click to un-cross' : 'Click to cross off';
       const fa = FA.test(t.text);
@@ -409,50 +820,194 @@ p,h1{margin:0}
       el.classList.toggle('done', t.done);
       el.style.setProperty('--tilt', t.tilt + 'deg');
     }
+    if (picking) { if (tasks.has(picking)) fillPicker(); else closePicker(); }
     chrome(); layout();
+    const now = shapeOf(), back = hid && !hiding;
+    if (spreading() && hiding) {
+      const seen = [...els].filter(([, el]) => !el.hidden).map(([id]) => id).sort().join('|') + '#' + now;
+      if (pin || force || seen !== viewShape) spreadView(pin);
+      changedInView ||= !!pin || now !== shape;
+      viewShape = seen;
+    } else {
+      if (view) { view = null; viewShape = ''; layout(); }
+      // Back from a view: the saved page only spreads again if something changed on it meanwhile.
+      if (spreading() && (pin || force || (back && changedInView) || now !== shape)) spread(pin, force);
+      changedInView = false;
+    }
+    shape = now; hid = hiding;
   }
 
   // ---------- actions ----------
-  function offerUndo(msg, fn) {
+  // Auto sweeps that land while the last one's toast is still up join it, and one Undo brings them all back.
+  let autoSwept = 0;
+  function offerUndo(msg, fn, swept = 0) {
+    if (swept) {
+      const prev = autoSwept && undoFn, next = fn;
+      if (prev) fn = () => { next(); prev(); };
+      autoSwept += swept;
+      msg = `Auto-swept ${autoSwept} crossed-off ${autoSwept === 1 ? 'task' : 'tasks'}`;
+    } else autoSwept = 0;
     undoFn = fn; $('toastMsg').textContent = msg; $('toast').hidden = false;
     clearTimeout(toastTimer); toastTimer = setTimeout(hideToast, 7000);
   }
-  function hideToast() { $('toast').hidden = true; undoFn = null; }
+  function hideToast() { $('toast').hidden = true; undoFn = null; autoSwept = 0; }
   function doUndo() { const fn = undoFn; hideToast(); if (fn) fn(); }
 
   function toggle(id) {
     const t = tasks.get(id); if (!t) return;
     t.done = !t.done; t.done_at = t.done ? Date.now() : null;
+    spared.delete(id);
     commit([id]);
   }
   // Takes tasks off the page. The server keeps the rows and only flags them as archived.
-  function removeTasks(ids, msg) {
+  function removeTasks(ids, msg, auto = false) {
     const gone = ids.map(id => tasks.get(id)).filter(Boolean).map(t => ({ ...t }));
     if (!gone.length) return;
     gone.forEach(t => { tasks.delete(t.id); tomb.set(t.id, t); });
     commit(gone.map(t => t.id));
     offerUndo(msg || `Removed “${gone[0].text}”`, () => {
-      gone.forEach(t => { tomb.delete(t.id); tasks.set(t.id, t); });
+      gone.forEach(t => { tomb.delete(t.id); tasks.set(t.id, t); if (auto) spared.add(t.id); });
       commit(gone.map(t => t.id));
-    });
+    }, auto ? gone.length : 0);
   }
-  function tidy() {
-    const W = field.clientWidth, H = field.clientHeight, before = [], placed = [];
-    const order = [...els].map(([id, el]) => ({ id, w: el.offsetWidth, h: el.offsetHeight })).sort((a, b) => b.w - a.w);
-    for (const o of order) {
-      const t = tasks.get(o.id); if (!t) continue;
-      before.push({ id: t.id, x: t.x, y: t.y });
-      const c = freeSpot(o.w, o.h, placed, 240);
-      placed.push(c); t.x = c.x / W; t.y = c.y / H;
-    }
-    commit(before.map(b => b.id));
-    offerUndo('Tidied up', () => {
-      before.forEach(b => { const t = tasks.get(b.id); if (t) { t.x = b.x; t.y = b.y; } });
-      commit(before.map(b => b.id));
-    });
+  function sweep() {
+    const ids = [...tasks.values()].filter(t => t.done).map(t => t.id);
+    removeTasks(ids, `Swept ${ids.length} crossed-off ${ids.length === 1 ? 'task' : 'tasks'}`);
+  }
+  // ---------- tags ----------
+  function setTag(id, tag, on) {
+    const t = tasks.get(id);
+    if (!t || t.tags.includes(tag) === on || (on && t.tags.length >= 5)) return;
+    t.tags = on ? [...t.tags, tag] : t.tags.filter(g => g !== tag);
+    commit([id]);
+  }
+  function setFilter(tag) {
+    filter = tag;
+    try { tag ? localStorage.setItem(FKEY, tag) : localStorage.removeItem(FKEY); } catch {}
+    render();
+  }
+
+  function openPicker(id, anchor) {
+    closePicker();
+    const el = els.get(id);
+    if (!el) return;
+    picking = id; el.classList.add('picking');
+    fillPicker();
+    const p = $('picker'); p.hidden = false;
+    const r = anchor.getBoundingClientRect(), w = p.offsetWidth, h = p.offsetHeight;
+    p.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left)) + 'px';
+    p.style.top = (r.bottom + 6 + h > innerHeight - 8 ? Math.max(8, r.top - h - 6) : r.bottom + 6) + 'px';
+    (p.querySelector('.popt') || $('pickNew')).focus();
+  }
+  function fillPicker() {
+    const t = tasks.get(picking), tags = allTags(true);
+    if (!t) return;
+    const focused = document.activeElement?.dataset?.tag;
+    $('pickList').replaceChildren(...(tags.length ? tags.map(g => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'popt'; b.dataset.tag = g; b.dir = 'auto';
+      b.setAttribute('aria-pressed', String(t.tags.includes(g)));
+      const name = document.createElement('span'); name.textContent = g;
+      b.append(dot(g), name); b.insertAdjacentHTML('beforeend', ICON_CHECK);
+      return b;
+    }) : [Object.assign(document.createElement('p'), { className: 'pnote', textContent: 'No tags yet' })]));
+    if (focused) $('pickList').querySelector(`[data-tag="${CSS.escape(focused)}"]`)?.focus();
+  }
+  function closePicker() {
+    if (!picking) return;
+    els.get(picking)?.classList.remove('picking');
+    picking = null; $('picker').hidden = true; $('pickNew').value = '';
+  }
+
+  // ---------- auto sweep ----------
+  // Each crossed-off task leaves the page a set time after it was crossed off. One brought back with
+  // Undo stays until it is crossed off again.
+  const spared = new Set();
+  let autoBusy = false;
+  function due() {
+    const by = Date.now() - prefs.auto_sweep * 1000;
+    return [...tasks.values()].filter(t => t.done && t.done_at != null && t.done_at <= by && !spared.has(t.id) && !isBusy(t.id)).map(t => t.id);
+  }
+  async function autoRun() {
+    if (!prefs.auto_sweep || autoBusy || !loaded || mode !== 'synced' || !due().length) return;
+    // A tab left in the background stops pulling, so fetch the page first: acting on a stale copy
+    // would write old positions over newer ones and could bring back tasks removed elsewhere.
+    autoBusy = true;
+    await pull();
+    autoBusy = false;
+    const ids = due();
+    if (mode === 'synced' && ids.length) removeTasks(ids, '', true);
+  }
+
+  function showPrefs() {
+    $('autoSweep').value = String(prefs.auto_sweep);
+    for (const r of document.querySelectorAll('input[name="layout"]')) r.checked = r.value === prefs.layout;
+    $('autoTag').checked = prefs.auto_tag;
+    $('filterMode').value = prefs.filter_mode;
+  }
+
+  // ---------- tags in settings ----------
+  // The list is drawn when settings opens and after each change, never while someone is typing in it.
+  function fillTagList() {
+    const open = $('tagList').querySelector('details[open]')?.dataset.tag;
+    const names = allTags(true);
+    $('tagList').replaceChildren(...names.map(name => {
+      const m = tagMeta.get(name) || { color: -1, description: '' };
+      const row = document.createElement('details');
+      row.className = 'trow'; row.dataset.tag = name; row.open = name === open;
+      const sum = document.createElement('summary'), b = document.createElement('b'), d = document.createElement('span');
+      b.textContent = name; b.dir = 'auto';
+      d.textContent = m.description || 'No description';
+      sum.append(dot(name), b, d);
+      const body = document.createElement('div'); body.className = 'tbody';
+      body.innerHTML = '<label>Name<input data-f="name" type="text" maxlength="25" autocomplete="off" spellcheck="false"></label>' +
+        '<label>Description<textarea data-f="description" rows="2" maxlength="200" placeholder="What belongs here, e.g. emails, meetings, anything for the job"></textarea></label>' +
+        '<div class="tfoot"><div class="swatches" role="group" aria-label="Colour"></div><button class="tdel" type="button">Delete tag</button></div>';
+      body.querySelector('[data-f="name"]').value = name;
+      body.querySelector('[data-f="description"]').value = m.description;
+      body.querySelector('.swatches').append(...Array.from({ length: 8 }, (_, i) => {
+        const s = document.createElement('button');
+        s.type = 'button'; s.dataset.color = i; s.setAttribute('aria-label', `Colour ${i + 1}`);
+        s.setAttribute('aria-pressed', String(i === m.color));
+        const c = document.createElement('i'); c.className = 'sw'; c.style.setProperty('--c', `var(--tag${i})`);
+        s.append(c);
+        return s;
+      }));
+      row.append(sum, body);
+      return row;
+    }));
+    if (!names.length) $('tagList').append(Object.assign(document.createElement('p'), { className: 'pnote', textContent: 'No tags yet. Add one below, or type #tag in a task.' }));
+  }
+  async function saveTag(change) {
+    try {
+      const res = await api('PUT', { tags: [change] }, '/api/tags');
+      setTagMeta(res.tags);
+      if (change.rename) {
+        if (filter === change.name) setFilter(change.rename);
+        // The server renamed it on every task; this page's copies follow without being sent back.
+        for (const t of tasks.values()) if (t.tags.includes(change.name)) t.tags = cleanTags(t.tags.map(g => (g === change.name ? change.rename : g)));
+        const open = $('tagList').querySelector('details[open]');
+        if (open) open.dataset.tag = change.rename;
+      }
+    } catch {}
+    saveCache(); fillTagList(); render();
+  }
+  async function deleteTag(name) {
+    try {
+      const res = await api('DELETE', null, '/api/tags?name=' + encodeURIComponent(name));
+      setTagMeta(res.tags);
+      for (const t of tasks.values()) if (t.tags.includes(name)) t.tags = t.tags.filter(g => g !== name);
+      if (filter === name) setFilter(null);
+    } catch {}
+    saveCache(); fillTagList(); render();
+  }
+  function changePref(k, v) {
+    prefs[k] = v; prefsDirty = true; prefsRev++;
+    saveCache(); syncPrefs();
   }
 
   // ---------- writing ----------
+  // In loose rows a new task is written in the next slot, at the end; in soft spread, where you clicked.
   function openEditor({ id = null, x = .5, y = .5, seed = '' }) {
     closeEditor(true);
     const t = id ? tasks.get(id) : null;
@@ -463,26 +1018,56 @@ p,h1{margin:0}
     const ed = document.createElement('span');
     ed.className = 'edit'; ed.setAttribute('role', 'textbox'); ed.dir = 'auto';
     ed.setAttribute('aria-label', id ? 'Edit task' : 'New task');
-    ed.dataset.ph = 'two to five words'; ed.spellcheck = false;
+    ed.dataset.ph = 'send email'; ed.spellcheck = false;
     try { ed.contentEditable = 'plaintext-only'; } catch { ed.contentEditable = 'true'; }
     if (ed.contentEditable !== 'plaintext-only') ed.contentEditable = 'true';
     ed.textContent = id ? t.text : seed;
-    const wc = document.createElement('span'); wc.className = 'wc';
+    const wc = document.createElement('span'); wc.className = 'wc'; wc.textContent = HINT;
     host.append(ed, wc);
     draft = { id, el: host, ed, wc, x, y };
 
+    // While a #word is being typed, the line under the editor offers the tags it could be; Tab takes the first.
+    let offers = [];
+    const suggest = () => {
+      const m = /(?:^|\s)#([\p{L}\p{N}_-]*)$/u.exec(ed.textContent);
+      offers = [];
+      if (!m) return void (wc.textContent = HINT);
+      const part = m[1].toLowerCase(), known = allTags(true);
+      offers = known.filter(g => g.startsWith(part)).slice(0, 3);
+      const chips = offers.map((g, i) => {
+        const c = document.createElement('button');
+        c.type = 'button'; c.className = 'chip' + (i ? '' : ' first'); c.dataset.tag = g; c.tabIndex = -1;
+        c.append(dot(g), g);
+        if (!i) c.insertAdjacentHTML('beforeend', ' <kbd>Tab</kbd>');
+        return c;
+      });
+      if (part && TAG.test(part) && !known.includes(part)) {
+        chips.push(Object.assign(document.createElement('span'), { className: 'chip new', textContent: `+ new tag “${part}”` }));
+      }
+      if (chips.length) wc.replaceChildren(...chips); else wc.textContent = 'type a tag name';
+    };
+    const take = tag => {
+      ed.textContent = ed.textContent.replace(/#[\p{L}\p{N}_-]*$/u, '#' + tag + ' ');
+      const r = document.createRange(); r.selectNodeContents(ed); r.collapse(false);
+      const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      onInput();
+    };
     const onInput = () => {
       if (!ed.textContent) ed.replaceChildren();
       host.classList.toggle('fa', FA.test(ed.textContent));
-      const words = ed.textContent.trim().split(/\s+/).filter(Boolean).length;
-      wc.classList.toggle('over', words > 5);
-      wc.textContent = words > 5 ? `${words} words. Trim to five?` : 'Enter to keep · Esc to drop';
-      layout();
+      suggest(); layout();
     };
+    // mousedown, not click: the editor must keep its focus, or it closes before the tag lands.
+    wc.addEventListener('mousedown', e => {
+      const c = e.target.closest('[data-tag]');
+      e.preventDefault();
+      if (c) take(c.dataset.tag);
+    });
     ed.addEventListener('input', onInput);
     ed.addEventListener('keydown', e => {
       if (e.isComposing) return;
-      if (e.key === 'Enter') { e.preventDefault(); closeEditor(true); }
+      if (e.key === 'Tab' && offers.length) { e.preventDefault(); take(offers[0]); }
+      else if (e.key === 'Enter') { e.preventDefault(); closeEditor(true); }
       else if (e.key === 'Escape') { e.preventDefault(); closeEditor(false); }
       e.stopPropagation();
     });
@@ -504,49 +1089,75 @@ p,h1{margin:0}
   function closeEditor(keep) {
     if (!draft) return;
     const d = draft; draft = null;
-    const text = d.ed.textContent.replace(/\s+/g, ' ').trim().slice(0, 80);
+    const { text, tags } = splitTags(d.ed.textContent);
     d.ed.remove(); d.wc.remove();
     if (d.id) {
       d.el.classList.remove('editing');
       const t = tasks.get(d.id);
-      if (t && keep && !text) return removeTasks([d.id]);
-      if (t && keep && text !== t.text) { t.text = text; return commit([d.id]); }
+      if (!t || !keep) return render();
+      if (!text && !tags.length) return removeTasks([d.id]);
+      // Only #tags typed: they are added and the words stay as they were.
+      const next = text || t.text, all = cleanTags([...t.tags, ...tags]);
+      if (next !== t.text || all.length !== t.tags.length) { t.text = next; t.tags = all; return commit([d.id]); }
       return render();
     }
     d.el.remove();
     if (keep && text) {
       const id = newId();
-      tasks.set(id, { id, text, x: d.x, y: d.y, tilt: +(Math.random() * 5 - 2.5).toFixed(1), done: false, created_at: Date.now(), done_at: null });
-      return commit([id]);
+      const now = Date.now(), sort = Math.max(now, ...[...tasks.values()].map(t => rank(t) + 1));
+      const W = field.clientWidth || 1, H = field.clientHeight || 1;
+      tasks.set(id, {
+        id, text, x: (parseFloat(d.el.style.left) || 0) / W, y: (parseFloat(d.el.style.top) || 0) / H,
+        tilt: +(Math.random() * 5 - 2.5).toFixed(1), done: false, created_at: now, done_at: null, sort,
+        tags: cleanTags([...tags, ...(filter ? [filter] : [])]),
+      });
+      return commit([id], id);
     }
     render();
   }
 
   // ---------- input ----------
+  // In loose rows, dragging lifts a task out of its row and the others shift to show where it will land.
+  // In soft spread it goes wherever it is dropped, and the others make room.
   field.addEventListener('pointerdown', e => {
     const txt = e.target.closest('.txt');
     if (!txt || e.button !== 0) return;
-    const el = txt.parentElement, id = el.dataset.id;
+    const el = txt.parentElement, id = el.dataset.id, t = tasks.get(id);
+    if (!t) return;
     const W = field.clientWidth, H = field.clientHeight;
     const s = { px: e.clientX, py: e.clientY, x: parseFloat(el.style.left) || 0, y: parseFloat(el.style.top) || 0 };
-    let moved = false;
+    let from = -1;
     try { txt.setPointerCapture(e.pointerId); } catch {}
     const move = ev => {
       const dx = ev.clientX - s.px, dy = ev.clientY - s.py;
-      if (!moved) { if (Math.hypot(dx, dy) < 5) return; moved = true; held = id; el.classList.add('drag'); }
-      const t = tasks.get(id); if (!t) return;
+      if (!drag) {
+        if (Math.hypot(dx, dy) < 5) return;
+        from = shownInOrder().indexOf(t);
+        drag = { t, to: from }; held = id; el.classList.add('drag');
+      }
       const cx = clampC(s.x + dx, el.offsetWidth, W), cy = clampC(s.y + dy, el.offsetHeight, H);
       el.style.left = cx + 'px'; el.style.top = cy + 'px';
-      t.x = cx / W; t.y = cy / H;
+      if (spreading()) return;
+      const to = nearest(cx, cy);
+      if (to !== drag.to) { drag.to = to; layout(); }
     };
     const up = () => {
       txt.removeEventListener('pointermove', move);
       txt.removeEventListener('pointerup', up);
       txt.removeEventListener('pointercancel', up);
-      if (!moved) return;
-      el.classList.remove('drag'); held = null; dragEndAt = performance.now();
-      field.appendChild(el);
-      if (tasks.has(id)) commit([id]);
+      if (!drag) return;
+      const to = drag.to;
+      drag = null; held = null; el.classList.remove('drag'); dragEndAt = performance.now();
+      if (!tasks.has(id)) return render();
+      if (spreading()) {
+        t.x = (parseFloat(el.style.left) || 0) / W; t.y = (parseFloat(el.style.top) || 0) / H;
+        view?.set(id, { x: t.x, y: t.y });
+        return commit([id], id);
+      }
+      if (to === from) return render();
+      const rest = shownInOrder().filter(o => o !== t), prev = rest[to - 1], next = rest[to];
+      t.sort = prev && next ? (rank(prev) + rank(next)) / 2 : prev ? rank(prev) + 1000 : next ? rank(next) - 1000 : rank(t);
+      commit([id]);
     };
     txt.addEventListener('pointermove', move);
     txt.addEventListener('pointerup', up);
@@ -557,6 +1168,7 @@ p,h1{margin:0}
     const act = e.target.closest('[data-act]');
     if (act) {
       const id = act.closest('.task').dataset.id;
+      if (act.dataset.act === 'tag') return picking === id ? closePicker() : openPicker(id, act);
       return act.dataset.act === 'edit' ? openEditor({ id }) : removeTasks([id]);
     }
     const txt = e.target.closest('.txt');
@@ -577,7 +1189,8 @@ p,h1{margin:0}
   });
 
   document.addEventListener('keydown', e => {
-    if (draft) return;
+    if (draft || $('settings').open || picking) return;
+    if (e.key === 'Escape' && filter) return setFilter(null);
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && undoFn) { e.preventDefault(); return doUndo(); }
     if (e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
     const onTask = e.target.closest ? e.target.closest('.task') : null;
@@ -585,27 +1198,75 @@ p,h1{margin:0}
     if (onTask && e.key === 'F2') { e.preventDefault(); return openEditor({ id: onTask.dataset.id }); }
     if (e.key.length === 1 && e.key !== ' ') {
       e.preventDefault();
-      const W = field.clientWidth, H = field.clientHeight;
-      const c = freeSpot(FS * 9, FS * 1.7, rects());
-      openEditor({ x: c.x / W, y: c.y / H, seed: e.key });
+      const c = spreading() ? freeSpot(FS * 9, FS * 1.7) : { x: 0, y: 0 };
+      openEditor({ x: c.x / field.clientWidth, y: c.y / field.clientHeight, seed: e.key });
     }
   });
 
-  $('tidy').addEventListener('click', tidy);
-  $('sweep').addEventListener('click', () => {
-    const ids = [...tasks.values()].filter(t => t.done).map(t => t.id);
-    removeTasks(ids, `Swept ${ids.length} crossed-off ${ids.length === 1 ? 'task' : 'tasks'}`);
+  $('sweep').addEventListener('click', () => sweep());
+  $('legend').addEventListener('click', e => {
+    const b = e.target.closest('[data-tag]');
+    if (b) setFilter(filter === b.dataset.tag ? null : b.dataset.tag);
   });
+  $('pickList').addEventListener('click', e => {
+    const b = e.target.closest('[data-tag]');
+    if (b && picking) setTag(picking, b.dataset.tag, b.getAttribute('aria-pressed') !== 'true');
+  });
+  $('pickNew').addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || e.isComposing) return;
+    e.preventDefault();
+    const [tag] = cleanTags([e.target.value.trim()]);
+    if (tag && picking) { setTag(picking, tag, true); e.target.value = ''; }
+  });
+  $('picker').addEventListener('keydown', e => {
+    if (e.key === 'Escape') { const el = els.get(picking); closePicker(); el?.querySelector('[data-act="tag"]')?.focus(); }
+    e.stopPropagation();
+  });
+  document.addEventListener('pointerdown', e => {
+    if (picking && !e.target.closest('#picker, [data-act="tag"]')) closePicker();
+  });
+  $('autoSweep').append(...SWEEP_CHOICES.map(([m, label]) => new Option(label, m)));
+  $('autoSweep').addEventListener('change', e => changePref('auto_sweep', Number(e.target.value)));
+  for (const r of document.querySelectorAll('input[name="layout"]')) {
+    r.addEventListener('change', () => { changePref('layout', r.value); render(null, true); });
+  }
+  $('settingsBtn').addEventListener('click', () => { fillTagList(); $('settings').showModal(); });
+  $('autoTag').addEventListener('change', e => changePref('auto_tag', e.target.checked));
+  $('filterMode').addEventListener('change', e => { changePref('filter_mode', e.target.value); render(); });
+  $('tagList').addEventListener('change', e => {
+    const f = e.target.dataset.f, name = e.target.closest('.trow')?.dataset.tag;
+    if (!f || !name) return;
+    if (f === 'description') return saveTag({ name, description: e.target.value });
+    const [to] = cleanTags([e.target.value.trim()]);
+    if (to && to !== name) saveTag({ name, rename: to }); else e.target.value = name;
+  });
+  $('tagList').addEventListener('click', e => {
+    const name = e.target.closest('.trow')?.dataset.tag, sw = e.target.closest('[data-color]');
+    if (sw && name) return saveTag({ name, color: Number(sw.dataset.color) });
+    if (e.target.closest('.tdel') && name && confirm(`Delete #${name}? It comes off every task on the page.`)) deleteTag(name);
+  });
+  $('tagNew').addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || e.isComposing) return;
+    e.preventDefault();
+    const [name] = cleanTags([e.target.value.trim()]);
+    if (name) { e.target.value = ''; saveTag({ name }); }
+  });
+  $('settingsClose').addEventListener('click', () => $('settings').close());
+  // A click on the dimmed backdrop lands on the dialog itself; the panel's content sits in .pbody.
+  $('settings').addEventListener('click', e => { if (e.target === $('settings')) $('settings').close(); });
   $('undo').addEventListener('click', doUndo);
   $('signin').addEventListener('click', () => location.reload());
 
   // ---------- start ----------
   $('date').textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
   loadCache();
+  try { const f = localStorage.getItem(FKEY); if (f && TAG.test(f)) filter = f; } catch {}
+  shape = shapeOf();
+  showPrefs();
   render();
-  new ResizeObserver(layout).observe(field);
+  new ResizeObserver(relayout).observe(field);
   if (document.fonts) {
-    const refit = () => { for (const el of els.values()) delete el.dataset.sk; layout(); };
+    const refit = () => { for (const el of els.values()) delete el.dataset.sk; relayout(); };
     document.fonts.ready.then(refit);
     document.fonts.addEventListener('loadingdone', refit);
   }
@@ -616,6 +1277,7 @@ p,h1{margin:0}
   setInterval(() => { if (quiet()) pull(); }, 30000);
   document.addEventListener('visibilitychange', () => { if (quiet()) pull(); });
   addEventListener('online', () => { if (quiet()) pull(); });
+  setInterval(autoRun, 1000);
 })();
 </script>
 </body>
