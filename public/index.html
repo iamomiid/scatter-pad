@@ -557,6 +557,11 @@ p,h1,h2{margin:0}
     }
     return best;
   }
+  // The box a task really covers once tilted: a wide task leaning a few degrees reaches well above and below its line.
+  function footprint(w, h, deg = 0) {
+    const r = Math.abs(deg) * Math.PI / 180, c = Math.cos(r), s = Math.sin(r);
+    return [w * c + h * s, w * s + h * c];
+  }
   function gap(a, b) {
     const dx = Math.abs(a.x - b.x) - (a.w + b.w) / 2, dy = Math.abs(a.y - b.y) - (a.h + b.h) / 2;
     if (dx < 0 && dy < 0) return Math.max(dx, dy);
@@ -585,7 +590,7 @@ p,h1,h2{margin:0}
     if (!W || !H) return;
     const b = [];
     for (const [id, el] of els) {
-      const t = tasks.get(id), w = el.offsetWidth, h = el.offsetHeight;
+      const t = tasks.get(id), [w, h] = footprint(el.offsetWidth, el.offsetHeight, t?.tilt);
       const r = rng(id + '~'), jx = shake ? (r() - .5) * W * .14 : 0, jy = shake ? (r() - .5) * H * .18 : 0;
       if (t) b.push({ t, w, h, x: clampC(t.x * W + jx, w, W), y: clampC(t.y * H + jy, h, H), pin: id === pin, fx: 0, fy: 0 });
     }
@@ -610,7 +615,7 @@ p,h1,h2{margin:0}
     // Each task starts in its cell of the same centred grid loose rows uses, nudged off centre, then the cluster
     // is loosened just enough to keep a small gap. A task just written or dropped holds its spot, and while it
     // does, the others keep theirs from the view so far.
-    const list = shownInOrder(), sizes = list.map(t => [els.get(t.id).offsetWidth, els.get(t.id).offsetHeight]);
+    const list = shownInOrder(), sizes = list.map(t => footprint(els.get(t.id).offsetWidth, els.get(t.id).offsetHeight, t.tilt));
     const g = makeGrid(list.length, sizes), prev = view, b = [];
     list.forEach((t, i) => {
       const [w, h] = sizes[i], c = g.at(i), r = rng(t.id + '^');
@@ -654,6 +659,32 @@ p,h1,h2{margin:0}
         a.fx = fx; a.fy = fy;
       }
       for (const a of b) if (!a.pin) { a.x = clampC(a.x + a.fx * k, a.w, W); a.y = clampC(a.y + a.fy * k, a.h, H); }
+    }
+    separate(b, W, H);
+  }
+  // The soft push can settle with two tasks still touching, so finish with a hard one: any pair still
+  // overlapping is moved apart along whichever axis frees them sooner (a pinned task stays put), until
+  // nothing is written over anything else, or the page has no more room to give.
+  function separate(b, W, H) {
+    const pad = FS * .15;
+    for (let it = 0; it < 120; it++) {
+      let clear = true;
+      for (let i = 0; i < b.length; i++) for (let j = i + 1; j < b.length; j++) {
+        const a = b[i], o = b[j];
+        if (a.pin && o.pin) continue;
+        const ox = (a.w + o.w) / 2 + pad - Math.abs(a.x - o.x), oy = (a.h + o.h) / 2 + pad - Math.abs(a.y - o.y);
+        if (ox <= 0 || oy <= 0) continue;
+        clear = false;
+        const ka = a.pin ? 0 : o.pin ? 1 : .5, ko = 1 - ka;
+        if (ox < oy) {
+          const s = a.x < o.x || (a.x === o.x && a.t.id < o.t.id) ? -1 : 1, d = ox + .5;
+          a.x = clampC(a.x + s * d * ka, a.w, W); o.x = clampC(o.x - s * d * ko, o.w, W);
+        } else {
+          const s = a.y < o.y || (a.y === o.y && a.t.id < o.t.id) ? -1 : 1, d = oy + .5;
+          a.y = clampC(a.y + s * d * ka, a.h, H); o.y = clampC(o.y - s * d * ko, o.h, H);
+        }
+      }
+      if (clear) return;
     }
   }
   // Which tasks are on the page and what they say. Soft spread re-runs when this changes.
@@ -706,19 +737,27 @@ p,h1,h2{margin:0}
     layoutRows(W, H);
   }
 
-  // Soft spread: each task where it was put (or pushed), clamped inside the page.
+  // Soft spread: each task where it was put (or pushed), clamped inside the page. Positions were worked out
+  // for the page as it was then; a resized window, a late font or another device's screen changes how big
+  // each task is, so anything that now overlaps is nudged apart for this screen only (nothing is saved).
   function layoutSpread(W, H) {
     let shown = draft && !draft.id ? 1 : 0;
     for (const el of els.values()) if (!el.hidden) shown++;
     FS = Math.max(15, Math.min(32, Math.sqrt(W * H / (89 * Math.max(shown, 10)))));
     field.style.setProperty('--fs', FS.toFixed(1) + 'px');
     field.style.setProperty('--maxw', (W - 8) + 'px');
+    const b = [];
     for (const [id, el] of els) {
       const t = tasks.get(id);
       if (!t || held === id || el.hidden) continue;
-      const at = view?.get(id) || t, w = el.offsetWidth, h = el.offsetHeight, cx = clampC(at.x * W, w, W), cy = clampC(at.y * H, h, H);
-      place(el, cx, cy);
-      el.classList.toggle('flip', cx + w / 2 + 100 > W);
+      const at = view?.get(id) || t, [w, h] = footprint(el.offsetWidth, el.offsetHeight, t.tilt);
+      b.push({ t, el, w, h, x: clampC(at.x * W, w, W), y: clampC(at.y * H, h, H) });
+    }
+    separate(b, W, H);
+    for (const { t, el, x, y } of b) {
+      const w = el.offsetWidth, h = el.offsetHeight;
+      place(el, x, y);
+      el.classList.toggle('flip', x + w / 2 + 100 > W);
       strike(el, t, w, h);
     }
     if (draft && !draft.id) {
@@ -737,12 +776,12 @@ p,h1,h2{margin:0}
     FS = Math.max(15, Math.min(32, Math.sqrt(W * H / (89 * Math.max(items.length, 10)))));
     field.style.setProperty('--fs', FS.toFixed(1) + 'px');
     field.style.setProperty('--maxw', (W - 8) + 'px');
-    grid = makeGrid(items.length, items.map(([, el]) => [el.offsetWidth, el.offsetHeight]));
+    grid = makeGrid(items.length, items.map(([t, el]) => footprint(el.offsetWidth, el.offsetHeight, t?.tilt)));
     field.style.setProperty('--maxw', Math.max(FS * 5, grid.cw - FS * .6).toFixed(1) + 'px');
     items.forEach(([t, el], i) => {
-      const w = el.offsetWidth, h = el.offsetHeight, c = grid.at(i), r = rng((t ? t.id : 'draft') + '/');
-      const jx = (r() - .5) * 2 * Math.max(0, Math.min(grid.cw * .12, (grid.cw - w) / 2 - 4));
-      const jy = (r() - .5) * 2 * Math.max(0, Math.min(grid.rh * .14, (grid.rh - h) / 2 - 2));
+      const w = el.offsetWidth, h = el.offsetHeight, [fw, fh] = footprint(w, h, t?.tilt), c = grid.at(i), r = rng((t ? t.id : 'draft') + '/');
+      const jx = (r() - .5) * 2 * Math.max(0, Math.min(grid.cw * .12, (grid.cw - fw) / 2 - 4));
+      const jy = (r() - .5) * 2 * Math.max(0, Math.min(grid.rh * .14, (grid.rh - fh) / 2 - 2));
       const cx = clampC(c.x + jx, w, W), cy = clampC(c.y + jy, h, t ? H : H - 18);
       if (!t) return place(el, cx, cy);
       t.x = cx / W; t.y = cy / H;
