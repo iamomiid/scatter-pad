@@ -4,7 +4,8 @@
   "name": "scatter-pad",
   "main": "src/index.js",
   "compatibility_date": "2026-09-01",
-  // Optional: serve on your own domain instead of workers.dev.
+  // Optional: serve on your own domain instead of workers.dev. Access guards only that domain,
+  // so turn workers.dev and preview URLs off with it, or the list is open on them.
   // "routes": [{ "pattern": "todo.example.com", "custom_domain": true }],
   // "workers_dev": false,
   // "preview_urls": false,

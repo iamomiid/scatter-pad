@@ -1,4 +1,3 @@
-import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { mcp } from './mcp.js';
 import { SETTINGS, readSettings } from './settings.js';
 import { autoTag, ensureTags, listTags, tagsApi } from './tags.js';
@@ -9,34 +8,6 @@ const json = (data, status = 200) =>
     status,
     headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
   });
-
-let jwks, jwksIssuer;
-
-// Cloudflare Access sits in front of this Worker and signs every request it lets through.
-// Checking that signature here keeps the API closed even if Access is switched off by mistake.
-// Returns a Response when the request must be refused, null when it may proceed.
-async function denied(request, env) {
-  const { hostname } = new URL(request.url);
-  if (env.ACCESS_BYPASS === 'local' && (hostname === 'localhost' || hostname === '127.0.0.1')) return null;
-
-  const team = env.ACCESS_TEAM_DOMAIN, aud = env.ACCESS_AUD;
-  if (!team || !aud) return json({ error: 'access_not_configured' }, 503);
-
-  const token = request.headers.get('cf-access-jwt-assertion');
-  if (!token) return json({ error: 'unauthorized' }, 401);
-
-  const issuer = `https://${team}`;
-  if (jwksIssuer !== issuer) {
-    jwks = createRemoteJWKSet(new URL(`${issuer}/cdn-cgi/access/certs`));
-    jwksIssuer = issuer;
-  }
-  try {
-    await jwtVerify(token, jwks, { issuer, audience: aud });
-    return null;
-  } catch {
-    return json({ error: 'unauthorized' }, 401);
-  }
-}
 
 const ID = /^[A-Za-z0-9_-]{1,40}$/;
 
@@ -112,12 +83,10 @@ async function settings(request, env) {
 export default {
   async fetch(request, env) {
     const { pathname } = new URL(request.url);
-    // The MCP endpoint is open on purpose: it is for assistants, which cannot sign in through Access.
+    // Cloudflare Access guards the whole domain; the MCP endpoint is let through it on purpose (see README).
     if (pathname === '/mcp') return mcp(request, env);
     if (!['/api/tasks', '/api/settings', '/api/tags'].includes(pathname)) return json({ error: 'not_found' }, 404);
 
-    const refusal = await denied(request, env);
-    if (refusal) return refusal;
     if (pathname === '/api/settings') return settings(request, env);
     if (pathname === '/api/tags') return tagsApi(request, env, json);
 

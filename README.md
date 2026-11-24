@@ -53,21 +53,9 @@ The browser also keeps a copy in local storage, so the page paints instantly and
 
 ## Sign-in
 
-The API refuses every request until Cloudflare Access is configured. It checks the signed token Access adds to each request, so the list stays private even if Access is later switched off by mistake.
+Cloudflare Access is the only thing keeping the list private: the Worker itself does no sign-in check. In the Cloudflare Zero Trust dashboard, add a **self-hosted** Access application for the domain the Worker is served on, with an Allow policy that includes only your own email address. A **Bypass** policy for trusted IPs (home, office, VPN) works too.
 
-1. In the Cloudflare Zero Trust dashboard, add a **self-hosted** Access application for the domain the Worker is served on, with an Allow policy that includes only your own email address.
-2. Copy two values: the application's audience tag (`aud`) and your team domain (`<team>.cloudflareaccess.com`).
-3. Store them on the Worker:
-
-```bash
-npx wrangler secret put ACCESS_AUD
-```
-
-```bash
-npx wrangler secret put ACCESS_TEAM_DOMAIN
-```
-
-`ACCESS_TEAM_DOMAIN` is the bare host name, without `https://`.
+Because Access is the only guard, keep `workers_dev` and `preview_urls` off in `wrangler.jsonc`: Access does not cover those URLs, so the list would be open on them.
 
 ## MCP
 
@@ -82,7 +70,7 @@ npx wrangler secret put ACCESS_TEAM_DOMAIN
 | `set_tags` | Replaces a task's tags. |
 | `remove_task` | Takes a task off the page (archived, like everything else). |
 
-**This endpoint has no sign-in.** Anyone who knows the URL can read and rewrite the list. The Access check in the Worker does not apply to it.
+**This endpoint has no sign-in.** Anyone who knows the URL can read and rewrite the list.
 
 Access still stands in front of the whole domain, so `/mcp` has to be let through: add a second self-hosted Access application for `<your-domain>/mcp` with a single policy, action **Bypass**, include **Everyone**. The more specific path wins over the application that covers the domain.
 
@@ -115,18 +103,12 @@ npm install
 ```
 
 ```bash
-echo "ACCESS_BYPASS=local" > .dev.vars
-```
-
-```bash
 npm run db:local
 ```
 
 ```bash
 npm run dev
 ```
-
-`ACCESS_BYPASS=local` skips the Access check, and only for requests to `localhost` or `127.0.0.1`.
 
 ## Deploying
 
